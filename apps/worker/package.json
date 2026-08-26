@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@mandate/core": "workspace:*",
-    "@mandate/db": "workspace:*"
+    "@mandate/db": "workspace:*",
+    "@anthropic-ai/sdk": "^0.120.0"
   },
   "devDependencies": {
     "vitest": "^3.0.5",

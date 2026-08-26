@@ -1,14 +1,21 @@
 import { close } from '@mandate/db';
 import { config } from './config.ts';
+import { decideBatch, makeProposalClient } from './decide.ts';
 import { ingestBatch } from './ingest.ts';
 import { log } from './log.ts';
 
 let running = true;
 
+const agent = makeProposalClient();
+
 async function tick(): Promise<void> {
   const processed = await ingestBatch();
   if (processed > 0) {
     log.info('ingest.batch', { processed });
+  }
+  const decided = await decideBatch(agent);
+  if (decided > 0) {
+    log.info('decide.batch', { decided });
   }
 }
 
