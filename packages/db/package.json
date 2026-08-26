@@ -3,6 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "migrate.js",
-  "dependencies": { "pg": "^8.13.1" }
+  "main": "src/client.ts",
+  "exports": {
+    ".": "./src/client.ts"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10"
+  }
 }

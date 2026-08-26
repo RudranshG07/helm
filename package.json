@@ -2,11 +2,15 @@
   "name": "mandate-rescue",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "db:up": "docker compose up -d && sleep 3 && pnpm db:migrate",
+    "db:up": "docker compose up -d && sleep 5 && pnpm db:migrate",
     "db:down": "docker compose down",
     "db:migrate": "node packages/db/migrate.js",
+    "dev:api": "pnpm --filter @mandate/api dev",
+    "dev:worker": "pnpm --filter @mandate/worker dev",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r exec tsc --noEmit"
   },

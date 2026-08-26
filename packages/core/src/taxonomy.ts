@@ -1,4 +1,4 @@
-import type { Bucket, Method } from './types.js';
+import type { Bucket, Method } from './types.ts';
 
 export const TAXONOMY_VERSION = '0.1.0-seed';
 

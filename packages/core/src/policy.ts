@@ -1,5 +1,5 @@
-import type { PolicyContext, PolicyVerdict, Proposal } from './types.js';
-import { isHard } from './taxonomy.js';
+import type { PolicyContext, PolicyVerdict, Proposal } from './types.ts';
+import { isHard } from './taxonomy.ts';
 import {
   PDN_CUTOFF_MINUTE,
   PDN_MIN_LEAD_MS,
@@ -8,7 +8,7 @@ import {
   isPeak,
   snapOutOfPeak,
   toIstParts,
-} from './time.js';
+} from './time.ts';
 
 export const AFA_THRESHOLD_PAISE = 1_500_000;
 

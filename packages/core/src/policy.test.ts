@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ALL_RULE_IDS, AFA_THRESHOLD_PAISE, evaluate } from './policy.js';
-import { fromIst, isPeak, snapOutOfPeak, toIstParts, PEAK_WINDOWS } from './time.js';
-import type { PolicyContext, Proposal } from './types.js';
+import { ALL_RULE_IDS, AFA_THRESHOLD_PAISE, evaluate } from './policy.ts';
+import { fromIst, isPeak, snapOutOfPeak, toIstParts, PEAK_WINDOWS } from './time.ts';
+import type { PolicyContext, Proposal } from './types.ts';
 
 /** 2026-09-01 08:00 IST — a non-peak morning, used as the fixed "now" everywhere. */
 const NOW = fromIst(2026, 8, 1, 8 * 60);
@@ -49,9 +49,6 @@ function ev(p: Proposal, c: PolicyContext) {
   return v;
 }
 
-// Each rule gets: a DENY/DEFER case, an ALLOW case differing in exactly one
-// field, and a boundary. Boundaries are where these bugs actually live.
-
 describe('the happy path', () => {
   it('allows a legal, well-timed retry', () => {
     const v = ev(retry(), ctx());
@@ -69,7 +66,6 @@ describe('R-KILL', () => {
     expect(ev(retry(), ctx({ kill_switch: false })).verdict).toBe('ALLOW');
   });
   it('outranks every other rule', () => {
-    // Trip several rules at once; the kill switch must still be the one reported.
     const v = ev(retry(), ctx({
       kill_switch: true, write_enabled: false,
       subscription_status: 'halted', attempts_remaining: 0, last_bucket: 'HARD_CUSTOMER',
@@ -192,7 +188,6 @@ describe('R-PDN — the 24h pre-debit notification floor', () => {
   });
 
   it('boundary: exactly 24h out is legal', () => {
-    // 24h from 08:00 IST is 08:00 IST, which is outside every peak window.
     const exactly = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
     expect(ev(retry(exactly), ctx()).verdict).toBe('ALLOW');
   });
@@ -207,7 +202,6 @@ describe('R-PDN — the 24h pre-debit notification floor', () => {
     const nextDay = fromIst(2026, 8, 2, 23 * 60 + 59);      // T+1, and >24h out
     const v = ev(retry(nextDay), ctx({ now: lateNow }));
     expect(v.rule_id).toBe('R-PDN');
-    // Must land on T+2 or later in IST terms.
     expect(toIstParts(new Date(v.scheduled_for!)).epochDay)
       .toBeGreaterThanOrEqual(toIstParts(lateNow).epochDay + 2);
   });
@@ -219,8 +213,6 @@ describe('R-PDN — the 24h pre-debit notification floor', () => {
   });
 
   it('the adjusted time is never left inside a peak window', () => {
-    // now at 09:30 IST; the 24h floor lands at 09:30 next day, inside 10:00-13:00? No —
-    // 09:30 is before peak. Use 10:30 so the floor lands mid-peak.
     const n = fromIst(2026, 8, 1, 10 * 60 + 30);
     const v = ev(retry(new Date(n.getTime() + 1000)), ctx({ now: n }));
     expect(v.rule_id).toBe('R-PDN');
@@ -296,7 +288,6 @@ describe('malformed input never allows', () => {
 });
 
 describe('engine-wide invariants', () => {
-  // The one invariant a merchant is actually trusting. Fuzz everything else.
   it('never ALLOWs a write when consent is off or the kill switch is on', () => {
     const actions: Proposal['action'][] = ['RETRY_SCHEDULED', 'REAUTH_OUTREACH'];
     for (let i = 0; i < 400; i++) {
@@ -334,7 +325,6 @@ describe('engine-wide invariants', () => {
   });
 
   it('every rule in ALL_RULE_IDS fired somewhere in this suite', () => {
-    // A rule with no failing test is a rule you have not verified exists.
     const missing = ALL_RULE_IDS.filter((r) => !fired.has(r));
     expect(missing).toEqual([]);
   });
@@ -354,7 +344,6 @@ describe('time helpers', () => {
     expect(snapOutOfPeak(legal).getTime()).toBe(legal.getTime());
   });
   it('IST conversion is correct across the UTC midnight boundary', () => {
-    // 2026-09-03 02:00 IST is 2026-09-02 20:30 UTC. Day-of-month must read IST.
     const d = fromIst(2026, 8, 3, 2 * 60);
     expect(d.toISOString()).toBe('2026-09-02T20:30:00.000Z');
     expect(toIstParts(d).day).toBe(3);

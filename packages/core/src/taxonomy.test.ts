@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TAXONOMY_VERSION, classify, isHard, isOurBug } from './taxonomy.js';
+import { TAXONOMY_VERSION, classify, isHard, isOurBug } from './taxonomy.ts';
 
-// One case per code we expect to see. When the taxonomy is refilled from real
-// merchant data in Phase 1, this table grows and becomes the thing that stops a
-// mapping edit from silently re-bucketing production behaviour.
 describe('classify', () => {
   it.each([
     ['insufficient_funds', 'SOFT_LIQUIDITY'],
@@ -47,8 +44,6 @@ describe('classify', () => {
       .toBe('SOFT_LIQUIDITY');
   });
 
-  // A classifier that crashes takes the rescue loop down at exactly the moment
-  // something unusual is happening.
   it.each([
     [{}],
     [{ error_reason: null }],

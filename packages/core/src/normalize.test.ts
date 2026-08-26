@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalize } from './normalize.js';
+import { normalize } from './normalize.ts';
 
 const pendingEvent = {
   event: 'subscription.pending',

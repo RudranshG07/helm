@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { query } from './db.ts';
+import { query } from '@mandate/db';
 import { config, webhookSecret } from './config.ts';
 import { verifyWebhookSignature } from './signature.ts';
 

@@ -1,4 +1,4 @@
-import type { Method } from './types.js';
+import type { Method } from './types.ts';
 
 export interface RazorpayEvent {
   event?: string;

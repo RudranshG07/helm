@@ -23,15 +23,28 @@ importers:
       '@mandate/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mandate/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       fastify:
         specifier: ^5.2.1
         version: 5.12.1
-      pg:
-        specifier: ^8.13.1
-        version: 8.23.0
+    devDependencies:
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)
+
+  apps/worker:
+    dependencies:
+      '@mandate/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mandate/db':
+        specifier: workspace:*
+        version: link:../../packages/db
     devDependencies:
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: ^8.11.10
         version: 8.23.1
       vitest:
         specifier: ^3.0.5
@@ -48,6 +61,10 @@ importers:
       pg:
         specifier: ^8.13.1
         version: 8.23.0
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
 
 packages:
 

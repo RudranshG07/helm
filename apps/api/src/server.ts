@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import { config } from './config.ts';
-import { close, query } from './db.ts';
+import { close, query } from '@mandate/db';
 import { registerWebhookRoutes } from './webhook.ts';
 
 const REDACTED_KEYS = [
