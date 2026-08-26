@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { ALL_RULE_IDS, AFA_THRESHOLD_PAISE, evaluate } from './policy.ts';
 import { fromIst, isPeak, snapOutOfPeak, toIstParts, PEAK_WINDOWS } from './time.ts';
 import type { PolicyContext, Proposal } from './types.ts';
@@ -18,6 +18,9 @@ function ctx(over: Partial<PolicyContext> = {}): PolicyContext {
     amount_paise: 49900,
     cycle: fromIst(2026, 8, 1, 0),
     mandate_expiry_at: fromIst(2027, 0, 1, 0),
+    cycle_already_paid: false,
+    consecutive_soft_cycles: 0,
+    max_soft_cycles: 3,
     attempts_remaining: 2,
     attempt_number: 2,
     last_bucket: 'SOFT_LIQUIDITY',
@@ -324,10 +327,6 @@ describe('engine-wide invariants', () => {
     }
   });
 
-  it('every rule in ALL_RULE_IDS fired somewhere in this suite', () => {
-    const missing = ALL_RULE_IDS.filter((r) => !fired.has(r));
-    expect(missing).toEqual([]);
-  });
 });
 
 describe('time helpers', () => {
@@ -403,4 +402,58 @@ describe('execution phase re-checks what can change, not what is already settled
     const v = evaluate(retry(past), ctx(), { phase: 'execution' });
     expect(v.explanation).toContain('execution time');
   });
+});
+
+describe('R-PAID', () => {
+  it('refuses to charge a cycle the customer has already paid', () => {
+    expect(ev(retry(), ctx({ cycle_already_paid: true })).rule_id).toBe('R-PAID');
+  });
+
+  it('outranks the budget, so a paid cycle is never described as out of attempts', () => {
+    const v = ev(retry(), ctx({ cycle_already_paid: true, attempts_remaining: 0 }));
+    expect(v.rule_id).toBe('R-PAID');
+  });
+
+  it('still refuses at execution time, which is when a manual payment usually lands', () => {
+    const past = fromIst(2026, 7, 30, 8 * 60);
+    expect(evaluate(retry(past), ctx({ cycle_already_paid: true }), { phase: 'execution' }).rule_id)
+      .toBe('R-PAID');
+  });
+
+  it('does not block outreach on a paid cycle from being denied for the right reason', () => {
+    const p: Proposal = { subscription_id: 's', action: 'REAUTH_OUTREACH', reason: 'r', confidence: 0.5 };
+    expect(ev(p, ctx({ cycle_already_paid: true })).rule_id).toBe('R-PAID');
+  });
+});
+
+describe('R-CHRONIC', () => {
+  it('stops retrying a customer whose soft declines repeat across cycles', () => {
+    expect(ev(retry(), ctx({ consecutive_soft_cycles: 3, max_soft_cycles: 3 })).rule_id).toBe('R-CHRONIC');
+  });
+
+  it('boundary: one cycle below the limit still retries', () => {
+    expect(ev(retry(), ctx({ consecutive_soft_cycles: 2, max_soft_cycles: 3 })).verdict).toBe('ALLOW');
+  });
+
+  it('still allows re-authorization outreach, which is the remaining path', () => {
+    const p: Proposal = { subscription_id: 's', action: 'REAUTH_OUTREACH', reason: 'r', confidence: 0.6 };
+    expect(ev(p, ctx({ consecutive_soft_cycles: 5, max_soft_cycles: 3 })).verdict).toBe('ALLOW');
+  });
+
+  it('can be switched off by setting the limit to zero', () => {
+    expect(ev(retry(), ctx({ consecutive_soft_cycles: 99, max_soft_cycles: 0 })).verdict).toBe('ALLOW');
+  });
+
+  it('still refuses at execution time', () => {
+    const past = fromIst(2026, 7, 30, 8 * 60);
+    expect(evaluate(retry(past), ctx({ consecutive_soft_cycles: 3, max_soft_cycles: 3 }), { phase: 'execution' }).rule_id)
+      .toBe('R-CHRONIC');
+  });
+});
+
+afterAll(() => {
+  const missing = ALL_RULE_IDS.filter((r) => !fired.has(r));
+  if (missing.length > 0) {
+    throw new Error(`rules never exercised by any test: ${missing.join(', ')}`);
+  }
 });

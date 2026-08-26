@@ -81,6 +81,10 @@ export function evaluate(
     }
   }
 
+  if (ctx.cycle_already_paid) {
+    return deny('R-PAID', 'This billing cycle has already been paid; no attempt is owed.');
+  }
+
   if (ctx.last_bucket && isHard(ctx.last_bucket)) {
     if (isWrite) {
       return deny('R-HARD', `Last decline was ${ctx.last_bucket}; retrying cannot succeed.`);
@@ -88,6 +92,17 @@ export function evaluate(
     if (ctx.last_bucket === 'HARD_CUSTOMER') {
       return deny('R-HARD', 'Customer declined permanently; no further contact.');
     }
+  }
+
+  if (
+    isWrite &&
+    ctx.max_soft_cycles > 0 &&
+    ctx.consecutive_soft_cycles >= ctx.max_soft_cycles
+  ) {
+    return deny(
+      'R-CHRONIC',
+      `Soft declines have repeated across ${ctx.consecutive_soft_cycles} cycles; further retries are not recovering this mandate.`,
+    );
   }
 
   if (isWrite) {
@@ -198,7 +213,7 @@ export function evaluate(
 }
 
 export const ALL_RULE_IDS = [
-  'R-KILL', 'R-CONSENT', 'R-HALT', 'R-EXPIRY', 'R-HARD', 'R-METHOD',
+  'R-KILL', 'R-CONSENT', 'R-HALT', 'R-PAID', 'R-EXPIRY', 'R-HARD', 'R-CHRONIC', 'R-METHOD',
   'R-BUDGET', 'R-IDEMPOTENT', 'R-CONTACT', 'R-PDN', 'R-WINDOW',
   'R-DEGRADED', 'R-BLAST', 'R-MALFORMED', 'R-OK',
 ] as const;

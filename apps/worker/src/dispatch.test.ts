@@ -162,3 +162,91 @@ describe('the policy engine runs again immediately before the charge', () => {
     expect(second).toBe(0);
   });
 });
+
+describe('bugs the adversarial suite exposed', () => {
+  it('refuses to charge a cycle the customer already paid manually', async () => {
+    await seed();
+    await query(
+      `INSERT INTO payment_attempt (subscription_id, cycle, attempted_at, status, amount_paise, initiated_by)
+       VALUES ($1,$2, now(), 'captured', 49900, 'razorpay_default')`,
+      [SUB, CYCLE],
+    );
+    const gateway = new StubGateway();
+
+    await dispatchDue(gateway, new Date());
+
+    expect(gateway.createCalls).toHaveLength(0);
+    expect((await revocation())?.rule_id).toBe('R-PAID');
+  });
+
+  it('does not count our own malformed request against the attempt budget', async () => {
+    await seed({ attemptsInCycle: 0 });
+    for (let i = 0; i < 4; i += 1) {
+      await query(
+        `INSERT INTO payment_attempt (subscription_id, cycle, attempted_at, status, amount_paise,
+           error_source, initiated_by, counts_against_budget)
+         VALUES ($1,$2, now() - ($3::int * interval '1 hour'), 'failed', 49900,
+                 'business', 'mandate_rescue', FALSE)`,
+        [SUB, CYCLE, i],
+      );
+    }
+    const gateway = new StubGateway();
+
+    await dispatchDue(gateway, new Date());
+
+    expect(await revocation()).toBeNull();
+    const { rows } = await query(`SELECT state FROM execution_intent WHERE subscription_id = $1`, [SUB]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('does not count backfilled history against a live budget', async () => {
+    await seed({ attemptsInCycle: 0 });
+    for (let i = 0; i < 4; i += 1) {
+      await query(
+        `INSERT INTO payment_attempt (subscription_id, cycle, attempted_at, status, amount_paise,
+           source, initiated_by, counts_against_budget)
+         VALUES ($1,$2, now() - ($3::int * interval '1 hour'), 'failed', 49900,
+                 'backfill', 'razorpay_default', FALSE)`,
+        [SUB, CYCLE, i],
+      );
+    }
+    await dispatchDue(new StubGateway(), new Date());
+    expect(await revocation()).toBeNull();
+  });
+});
+
+describe('chronic soft declines are counted consecutively, not cumulatively', () => {
+  async function softCycle(cycleStart: Date, captured: boolean) {
+    await query(
+      `INSERT INTO payment_attempt (subscription_id, cycle, attempted_at, status, amount_paise,
+         bucket, initiated_by)
+       VALUES ($1,$2,$2,$3,49900,'SOFT_LIQUIDITY','razorpay_default')`,
+      [SUB, cycleStart, captured ? 'captured' : 'failed'],
+    );
+  }
+
+  it('does not block a customer whose old failures were followed by successes', async () => {
+    await seed({ attemptsInCycle: 0 });
+    await softCycle(new Date('2026-01-01T00:00:00Z'), false);
+    await softCycle(new Date('2026-02-01T00:00:00Z'), false);
+    await softCycle(new Date('2026-03-01T00:00:00Z'), false);
+    await softCycle(new Date('2026-04-01T00:00:00Z'), true);
+    await softCycle(CYCLE, false);
+
+    await dispatchDue(new StubGateway(), new Date());
+
+    expect(await revocation()).toBeNull();
+  });
+
+  it('blocks a customer whose recent cycles are all soft failures', async () => {
+    await seed({ attemptsInCycle: 0 });
+    await softCycle(new Date('2026-05-01T00:00:00Z'), false);
+    await softCycle(new Date('2026-06-01T00:00:00Z'), false);
+    await softCycle(new Date('2026-07-01T00:00:00Z'), false);
+    await softCycle(CYCLE, false);
+
+    await dispatchDue(new StubGateway(), new Date());
+
+    expect((await revocation())?.rule_id).toBe('R-CHRONIC');
+  });
+})

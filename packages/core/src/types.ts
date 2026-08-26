@@ -30,11 +30,14 @@ export interface PolicyContext {
   amount_paise: number;
   cycle: Date;
   mandate_expiry_at: Date | null;
+  cycle_already_paid: boolean;
 
   attempts_remaining: number;
   attempt_number: number;
 
   last_bucket: Bucket | null;
+  consecutive_soft_cycles: number;
+  max_soft_cycles: number;
   attempt_exists: boolean;
   attempt_in_flight: boolean;
 

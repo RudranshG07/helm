@@ -1,6 +1,7 @@
 import { close } from '@mandate/db';
 import { config } from './config.ts';
 import { decideBatch, makeProposalClient } from './decide.ts';
+import { rollupDegradation } from './degradation.ts';
 import { dispatchDue } from './dispatch.ts';
 import { reconcileStuck } from './executor.ts';
 import { RefusingGateway } from './gateway.ts';
@@ -14,6 +15,7 @@ const gateway = new RefusingGateway();
 
 async function tick(): Promise<void> {
   const processed = await ingestBatch();
+  await rollupDegradation();
   if (processed > 0) {
     log.info('ingest.batch', { processed });
   }

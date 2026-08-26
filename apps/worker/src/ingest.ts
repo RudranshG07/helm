@@ -89,7 +89,7 @@ async function insertAttempt(
       subscriptionId, attempt.rzp_payment_id, attempt.rzp_order_id, cycle, attempt.attempted_at,
       attempt.status, attempt.amount_paise, attempt.error_code, attempt.error_description,
       attempt.error_source, attempt.error_step, attempt.error_reason, attempt.issuer, attempt.bank,
-      classification.bucket, classification.taxonomy_version,
+      classification.bucket, classification.taxonomy_version, !isOurBug(attempt),
     ],
   );
 }
@@ -115,7 +115,7 @@ async function rescore(client: PoolClient, subscriptionId: string, cycle: Date):
      )
      SELECT
        (SELECT count(*) FROM cycle_attempts WHERE status = 'failed')::int AS consecutive_failures,
-       (SELECT count(*) FROM cycle_attempts)::int                        AS attempts_used,
+       (SELECT count(*) FROM cycle_attempts WHERE counts_against_budget)::int AS attempts_used,
        COALESCE((SELECT avg(CASE WHEN bucket LIKE 'SOFT%' THEN 1 ELSE 0 END)
                    FROM payment_attempt WHERE subscription_id = $1 AND status = 'failed'), 0) AS soft_rate,
        s.mandate_expiry_at, s.method, s.amount_paise,

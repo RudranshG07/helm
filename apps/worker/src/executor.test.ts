@@ -263,3 +263,53 @@ describe('settlement', () => {
     expect(await intentState()).toBe('SUBMITTED');
   });
 });
+
+describe('an amount change is refused loudly, not silently deduplicated', () => {
+  it('reports a mismatch rather than a benign duplicate', async () => {
+    await seed();
+    const gateway = new StubGateway();
+
+    await execute(request({ amount_paise: 49900 }), { gateway, dryRun: false });
+    const second = await execute(request({ amount_paise: 79900 }), { gateway, dryRun: false });
+
+    expect(second.status).toBe('amount_mismatch');
+    if (second.status === 'amount_mismatch') {
+      expect(second.intended_paise).toBe(49900);
+      expect(second.requested_paise).toBe(79900);
+    }
+  });
+
+  it('does not charge the new amount', async () => {
+    await seed();
+    const gateway = new StubGateway();
+
+    await execute(request({ amount_paise: 49900 }), { gateway, dryRun: false });
+    await execute(request({ amount_paise: 79900 }), { gateway, dryRun: false });
+
+    expect(gateway.createCalls).toHaveLength(1);
+    expect(gateway.createCalls[0]!.amount_paise).toBe(49900);
+  });
+
+  it('flags the intent row so the mismatch is visible after the fact', async () => {
+    await seed();
+    const gateway = new StubGateway();
+
+    await execute(request({ amount_paise: 49900 }), { gateway, dryRun: false });
+    await execute(request({ amount_paise: 79900 }), { gateway, dryRun: false });
+
+    const { rows } = await query<{ amount_mismatch: boolean; last_error: string }>(
+      `SELECT amount_mismatch, last_error FROM execution_intent WHERE subscription_id = $1`,
+      [SUB],
+    );
+    expect(rows[0]!.amount_mismatch).toBe(true);
+    expect(rows[0]!.last_error).toContain('79900');
+  });
+
+  it('still treats an identical amount as an ordinary duplicate', async () => {
+    await seed();
+    const gateway = new StubGateway();
+
+    await execute(request(), { gateway, dryRun: false });
+    expect((await execute(request(), { gateway, dryRun: false })).status).toBe('duplicate');
+  });
+});

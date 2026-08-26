@@ -6,5 +6,7 @@ export * from './normalize.ts';
 export * from './health.ts';
 export * from './liquidity.ts';
 export * from './idempotency.ts';
+export * from './degradation.ts';
+export * from './holidays.ts';
 export * from './agent.ts';
 export * from './agent-clients.ts';

@@ -13,6 +13,7 @@ import type { Bucket, MandateContext, Method, PolicyContext, ProposalClient } fr
 import { withTransaction } from '@mandate/db';
 import type { PoolClient } from 'pg';
 import { config } from './config.ts';
+import { isDegraded } from './degradation.ts';
 import { log } from './log.ts';
 
 interface Candidate {
@@ -30,6 +31,8 @@ interface Candidate {
   consecutive_failures: number;
   attempts_remaining: number;
   attempts_used: number;
+  cycle_already_paid: boolean;
+  consecutive_soft_cycles: number;
   days_to_expiry: number | null;
   contributions: Record<string, number>;
   error_code: string | null;
@@ -56,7 +59,23 @@ SELECT
   h.risk_band, h.risk_score::float8 AS risk_score, h.consecutive_failures,
   h.attempts_remaining, h.days_to_expiry, h.contributions,
   (SELECT count(*)::int FROM payment_attempt
-    WHERE subscription_id = s.id AND cycle = COALESCE(s.current_start, to_timestamp(0))) AS attempts_used,
+    WHERE subscription_id = s.id AND cycle = COALESCE(s.current_start, to_timestamp(0))
+      AND counts_against_budget) AS attempts_used,
+  EXISTS (SELECT 1 FROM payment_attempt
+           WHERE subscription_id = s.id AND cycle = COALESCE(s.current_start, to_timestamp(0))
+             AND status = 'captured') AS cycle_already_paid,
+  (SELECT count(*)::int FROM (
+     SELECT cycle, bool_or(status = 'captured') AS paid,
+            bool_or(bucket LIKE 'SOFT%') AS soft
+       FROM payment_attempt
+      WHERE subscription_id = s.id
+      GROUP BY cycle
+      ORDER BY cycle DESC
+   ) c WHERE c.cycle > COALESCE(
+     (SELECT max(cycle) FROM payment_attempt
+       WHERE subscription_id = s.id AND status = 'captured'),
+     to_timestamp(0)
+   ) AND c.soft AND NOT c.paid) AS consecutive_soft_cycles,
   a.error_code, a.error_reason, a.error_source, a.error_step, a.bucket, a.taxonomy_version, a.issuer,
   COALESCE((
     SELECT array_agg(EXTRACT(DAY FROM attempted_at AT TIME ZONE 'Asia/Kolkata')::int)
@@ -91,7 +110,7 @@ function earliestLegalSlot(now: Date): Date {
   return isPeak(floor) ? snapOutOfPeak(floor) : floor;
 }
 
-function buildContext(row: Candidate, now: Date): MandateContext {
+function buildContext(row: Candidate, now: Date, degraded: boolean): MandateContext {
   const liquidity = inferLiquidityWindow(row.success_days ?? []);
   return {
     subscription_id: row.subscription_id,
@@ -120,15 +139,15 @@ function buildContext(row: Candidate, now: Date): MandateContext {
       tier: liquidity.tier,
     },
     issuer: row.issuer,
-    issuer_degraded: false,
-    degradation_source: null,
+    issuer_degraded: degraded,
+    degradation_source: degraded ? 'internal_rollup' : null,
     successful_payment_days: row.success_days ?? [],
     now: now.toISOString(),
     earliest_legal_slot: earliestLegalSlot(now).toISOString(),
   };
 }
 
-function buildPolicyContext(row: Candidate, now: Date): PolicyContext {
+function buildPolicyContext(row: Candidate, now: Date, degraded: boolean): PolicyContext {
   return {
     now,
     kill_switch: false,
@@ -138,12 +157,15 @@ function buildPolicyContext(row: Candidate, now: Date): PolicyContext {
     amount_paise: row.amount_paise,
     cycle: row.cycle,
     mandate_expiry_at: row.mandate_expiry_at,
+    cycle_already_paid: row.cycle_already_paid,
     attempts_remaining: row.attempts_remaining,
     attempt_number: row.attempts_used + 1,
     last_bucket: row.bucket,
+    consecutive_soft_cycles: row.consecutive_soft_cycles,
+    max_soft_cycles: config.maxSoftCycles,
     attempt_exists: false,
     attempt_in_flight: false,
-    issuer_degraded: false,
+    issuer_degraded: degraded,
     contacts_this_cycle: row.contacts_this_cycle,
     max_contacts_per_cycle: 1,
     blast_attempts_used: 0,
@@ -175,10 +197,11 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
   const killed = await withTransaction(killSwitchEngaged);
 
   for (const row of rows) {
-    const ctx = buildContext(row, now);
+    const degraded = await isDegraded(row.issuer, row.method);
+    const ctx = buildContext(row, now, degraded);
     const outcome = await agent.propose(ctx);
 
-    const policyCtx = { ...buildPolicyContext(row, now), kill_switch: killed };
+    const policyCtx = { ...buildPolicyContext(row, now, degraded), kill_switch: killed };
 
     const proposal = outcome.ok
       ? outcome.proposal

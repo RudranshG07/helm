@@ -27,6 +27,7 @@ export type ExecutionResult =
   | { status: 'executed'; key: string; order_id: string; payment: PaymentRef | null }
   | { status: 'dry_run'; key: string }
   | { status: 'duplicate'; key: string }
+  | { status: 'amount_mismatch'; key: string; intended_paise: number; requested_paise: number }
   | { status: 'reconciled'; key: string; order_id: string }
   | { status: 'blocked'; key: string; reason: string };
 
@@ -93,6 +94,31 @@ export async function execute(
   }
 
   if (!claimed.inserted) {
+    const { rows } = await query<{ amount_paise: number }>(
+      `SELECT amount_paise FROM execution_intent WHERE idempotency_key = $1`,
+      [key],
+    );
+    const intended = rows[0]?.amount_paise;
+
+    if (intended !== undefined && intended !== req.amount_paise) {
+      await query(
+        `UPDATE execution_intent SET amount_mismatch = TRUE, last_error = $2
+          WHERE idempotency_key = $1`,
+        [key, `requested ${req.amount_paise} paise against an intent for ${intended} paise`],
+      );
+      log.error('executor.amount_mismatch', {
+        key,
+        intended_paise: intended,
+        requested_paise: req.amount_paise,
+      });
+      return {
+        status: 'amount_mismatch',
+        key,
+        intended_paise: intended,
+        requested_paise: req.amount_paise,
+      };
+    }
+
     log.info('executor.duplicate_intent', { key });
     return { status: 'duplicate', key };
   }
