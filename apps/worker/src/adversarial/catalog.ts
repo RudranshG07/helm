@@ -23,10 +23,10 @@ export const SCENARIOS: Scenario[] = [
 
   { id: 'B1', category: 'Lifecycle races', title: 'Merchant write access revoked while a job is in flight', expectation: 'Checked immediately before the call, not only at proposal time.', outcome: 'HANDLED' },
   { id: 'B2', category: 'Lifecycle races', title: 'Kill switch tripped mid-run', expectation: 'Read fresh per attempt. No intent row written.', outcome: 'HANDLED' },
-  { id: 'B3', category: 'Lifecycle races', title: 'Mandate expires between scheduling and execution', expectation: 'R-EXPIRY denies at proposal time.', outcome: 'DETECTED', note: 'The policy engine denies at decision time, but the dispatcher does not re-run policy immediately before the call. A mandate that expires in the gap is caught only by the gateway.' },
-  { id: 'B4', category: 'Lifecycle races', title: 'Subscription halts while a retry is scheduled', expectation: 'R-HALT denies.', outcome: 'DETECTED', note: 'Same gap as B3: policy is evaluated once, at decision time.' },
+  { id: 'B3', category: 'Lifecycle races', title: 'Mandate expires between scheduling and execution', expectation: 'R-EXPIRY denies again at execution time.', outcome: 'HANDLED' },
+  { id: 'B4', category: 'Lifecycle races', title: 'Subscription halts while a retry is scheduled', expectation: 'R-HALT denies again at execution time.', outcome: 'HANDLED' },
   { id: 'B5', category: 'Lifecycle races', title: 'Customer pays manually while a retry is scheduled', expectation: 'Detect the invoice is settled and cancel the job.', outcome: 'UNHANDLED', note: 'No invoice-state check before dispatch. The attempt would be spent, and reconciliation would record it as a duplicate charge on an already-paid cycle.' },
-  { id: 'B6', category: 'Lifecycle races', title: 'Mandate revoked by the customer between proposal and execution', expectation: 'Fresh state read before executing.', outcome: 'DETECTED', note: 'The gateway would reject it, so no money moves, but an attempt is spent.' },
+  { id: 'B6', category: 'Lifecycle races', title: 'Mandate revoked by the customer between proposal and execution', expectation: 'Fresh state is read and re-evaluated before executing.', outcome: 'HANDLED' },
   { id: 'B7', category: 'Lifecycle races', title: 'Subscription amount changes between attempts', expectation: 'The idempotency key must not authorise a different amount.', outcome: 'UNHANDLED', note: 'The key is derived from subscription, cycle and attempt number only. A changed amount reuses the same key and would be silently blocked as a duplicate rather than flagged.' },
   { id: 'B8', category: 'Lifecycle races', title: 'Subscription cancelled mid-cycle', expectation: 'R-HALT denies at proposal time.', outcome: 'HANDLED' },
 
@@ -46,7 +46,7 @@ export const SCENARIOS: Scenario[] = [
   { id: 'D5', category: 'Time and calendar', title: 'Successes on the 1st and the 31st', expectation: 'Circular statistics. Must not average to the middle of the month.', outcome: 'HANDLED' },
   { id: 'D6', category: 'Time and calendar', title: 'Stored UTC, reasoned in IST, across midnight', expectation: 'Day of month reads IST, not UTC.', outcome: 'HANDLED' },
   { id: 'D7', category: 'Time and calendar', title: 'Boundary exactly at 24 hours, and one second under', expectation: 'Both sides tested, the legal side defined.', outcome: 'HANDLED' },
-  { id: 'D8', category: 'Time and calendar', title: 'A scheduled job whose time passed while the worker was down', expectation: 'Re-validate every rule before executing a stale job.', outcome: 'UNHANDLED', note: 'The dispatcher executes any ALLOW whose scheduled time has passed, without re-running the policy engine. A job stale by days would still fire.' },
+  { id: 'D8', category: 'Time and calendar', title: 'A scheduled job whose time passed while the worker was down', expectation: 'Re-validate the revocable and structural rules before executing a stale job.', outcome: 'HANDLED' },
   { id: 'D9', category: 'Time and calendar', title: 'Retry scheduled onto a bank holiday for e-mandate', expectation: 'Shifted per the bank calendar.', outcome: 'UNHANDLED', note: 'No bank holiday calendar exists. The debit would silently shift at the bank, and our recorded schedule would be wrong.' },
 
   { id: 'E1', category: 'Budget', title: 'Our attempt and an automatic retry in the same cycle', expectation: 'Both count against the network budget.', outcome: 'HANDLED' },
@@ -64,8 +64,11 @@ export const SCENARIOS: Scenario[] = [
   { id: 'F5', category: 'Policy and agent', title: 'Agent proposes a time in the past', expectation: 'R-PDN adjusts rather than erroring.', outcome: 'HANDLED' },
   { id: 'F6', category: 'Policy and agent', title: 'Agent API times out', expectation: 'DEFER after retry. Never a fallback action.', outcome: 'HANDLED' },
   { id: 'F7', category: 'Policy and agent', title: 'Model refuses the request', expectation: 'Treated as an invalid response and deferred.', outcome: 'HANDLED' },
-  { id: 'F8', category: 'Policy and agent', title: 'Blast radius cap reached exactly at this attempt', expectation: 'R-BLAST denies.', outcome: 'DETECTED', note: 'The rule exists and is tested, but the dispatcher passes a hardcoded zero for attempts used, so the cap is never actually reached in the live path.' },
+  { id: 'F8', category: 'Policy and agent', title: 'Blast radius cap reached exactly at this attempt', expectation: 'R-BLAST denies, counting live intents per merchant.', outcome: 'HANDLED' },
   { id: 'F9', category: 'Policy and agent', title: 'Issuer degraded at execution time', expectation: 'R-DEGRADED defers rather than spending an attempt.', outcome: 'UNHANDLED', note: 'No degradation detector is wired. The flag is hardcoded false everywhere, so R-DEGRADED can never fire.' },
+  { id: 'G1', category: 'Stale decisions', title: 'Timing rules re-checked at execution would always fail', expectation: 'The notification lead time was satisfied when the attempt was scheduled, so it is not re-checked.', outcome: 'HANDLED' },
+  { id: 'G2', category: 'Stale decisions', title: 'A revoked decision is picked up again on the next pass', expectation: 'The original decision is marked revoked so it is not re-selected.', outcome: 'HANDLED' },
+  { id: 'G3', category: 'Stale decisions', title: 'The reason an attempt was cancelled is not visible to the merchant', expectation: 'The revocation is written as its own decision row with the rule that stopped it.', outcome: 'HANDLED' },
   { id: 'F10', category: 'Policy and agent', title: 'Dry run bypassed at one call site', expectation: 'Enforced inside the executor so no call site can bypass it.', outcome: 'HANDLED' },
 ];
 

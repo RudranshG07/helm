@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
-const url = process.env.DATABASE_URL ?? 'postgres://mandate:mandate@localhost:5433/mandate_rescue';
+const url = process.env.DATABASE_URL ?? 'postgres://mandate:mandate@127.0.0.1:5433/mandate_rescue';
 
 const client = new pg.Client({ connectionString: url });
 await client.connect();

@@ -27,7 +27,18 @@ const defer = (rule_id: string, explanation: string, extra: Partial<PolicyVerdic
   ...extra,
 });
 
-export function evaluate(proposal: Proposal, ctx: PolicyContext): PolicyVerdict {
+export type Phase = 'proposal' | 'execution';
+
+export interface EvaluateOptions {
+  phase?: Phase;
+}
+
+export function evaluate(
+  proposal: Proposal,
+  ctx: PolicyContext,
+  options: EvaluateOptions = {},
+): PolicyVerdict {
+  const phase = options.phase ?? 'proposal';
   if (!proposal || typeof proposal !== 'object') {
     return defer('R-MALFORMED', 'Proposal was not an object.');
   }
@@ -113,10 +124,31 @@ export function evaluate(proposal: Proposal, ctx: PolicyContext): PolicyVerdict 
   }
 
   const proposed = new Date(proposal.scheduled_for);
+  if (Number.isNaN(proposed.getTime()) && phase === 'execution') {
+    return defer('R-MALFORMED', 'scheduled_for is not a valid timestamp.');
+  }
   if (Number.isNaN(proposed.getTime())) {
     return defer('R-MALFORMED', 'scheduled_for is not a valid timestamp.');
   }
   const proposed_for = proposed.toISOString();
+
+  if (phase === 'execution') {
+    if (ctx.blast_attempts_used >= ctx.blast_attempts_max) {
+      return deny('R-BLAST', 'Blast-radius cap for this run has been reached.');
+    }
+    if (ctx.issuer_degraded) {
+      return defer('R-DEGRADED', 'Issuer or method is currently degraded; holding rather than spending an attempt.', {
+        proposed_for,
+      });
+    }
+    return {
+      verdict: 'ALLOW',
+      rule_id: 'R-OK',
+      scheduled_for: proposed.toISOString(),
+      proposed_for,
+      explanation: 'All bounds still satisfied at execution time.',
+    };
+  }
 
   let target = proposed;
   let adjusted = false;

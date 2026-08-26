@@ -349,3 +349,58 @@ describe('time helpers', () => {
     expect(toIstParts(d).day).toBe(3);
   });
 });
+
+describe('execution phase re-checks what can change, not what is already settled', () => {
+  const past = fromIst(2026, 7, 30, 8 * 60);
+
+  it('allows a time already in the past, because the notification lead time was satisfied when it was scheduled', () => {
+    const v = ev(retry(past), ctx());
+    expect(v.rule_id).toBe('R-PDN');
+    const atExecution = evaluate(retry(past), ctx(), { phase: 'execution' });
+    expect(atExecution.verdict).toBe('ALLOW');
+  });
+
+  it('allows a time inside a peak window at execution, because placement was decided at scheduling', () => {
+    const peak = fromIst(2026, 8, 3, 11 * 60);
+    expect(ev(retry(peak), ctx()).rule_id).toBe('R-WINDOW');
+    expect(evaluate(retry(peak), ctx(), { phase: 'execution' }).verdict).toBe('ALLOW');
+  });
+
+  it.each([
+    ['R-KILL', { kill_switch: true }],
+    ['R-CONSENT', { write_enabled: false }],
+    ['R-HALT', { subscription_status: 'halted' }],
+    ['R-HARD', { last_bucket: 'HARD_INSTRUMENT' as const }],
+    ['R-BUDGET', { attempts_remaining: 0 }],
+    ['R-IDEMPOTENT', { attempt_exists: true }],
+    ['R-METHOD', { method: 'card' as const }],
+  ])('still refuses on %s at execution time', (rule, over) => {
+    const v = evaluate(retry(past), ctx(over), { phase: 'execution' });
+    expect(v.verdict).not.toBe('ALLOW');
+    expect(v.rule_id).toBe(rule);
+  });
+
+  it('still refuses an expiry that passed while the attempt was waiting', () => {
+    const v = evaluate(retry(past), ctx({ mandate_expiry_at: fromIst(2026, 7, 1, 0) }), { phase: 'execution' });
+    expect(v.rule_id).toBe('R-EXPIRY');
+  });
+
+  it('still defers on a degraded issuer at execution time', () => {
+    const v = evaluate(retry(past), ctx({ issuer_degraded: true }), { phase: 'execution' });
+    expect(v.rule_id).toBe('R-DEGRADED');
+  });
+
+  it('still refuses past the blast radius cap at execution time', () => {
+    const v = evaluate(retry(past), ctx({ blast_attempts_used: 50, blast_attempts_max: 50 }), { phase: 'execution' });
+    expect(v.rule_id).toBe('R-BLAST');
+  });
+
+  it('defaults to the proposal phase when no option is passed', () => {
+    expect(evaluate(retry(past), ctx()).rule_id).toBe('R-PDN');
+  });
+
+  it('explains that the check happened at execution time', () => {
+    const v = evaluate(retry(past), ctx(), { phase: 'execution' });
+    expect(v.explanation).toContain('execution time');
+  });
+});

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch src/index.ts",
     "start": "node src/index.ts",
-    "test": "DATABASE_URL=${DATABASE_URL:-postgres://mandate:mandate@localhost:5433/mandate_rescue} vitest run --passWithNoTests",
+    "test": "DATABASE_URL=${DATABASE_URL:-postgres://mandate:mandate@127.0.0.1:5433/mandate_rescue} vitest run --passWithNoTests",
     "adversarial": "node src/adversarial/generate.ts ../../docs/adversarial.md"
   },
   "dependencies": {
