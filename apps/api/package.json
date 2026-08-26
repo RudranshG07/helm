@@ -11,7 +11,8 @@
   "dependencies": {
     "@mandate/core": "workspace:*",
     "fastify": "^5.2.1",
-    "@mandate/db": "workspace:*"
+    "@mandate/db": "workspace:*",
+    "@fastify/static": "^8.0.4"
   },
   "devDependencies": {
     "vitest": "^3.0.5"

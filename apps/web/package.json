@@ -1,0 +1,23 @@
+{
+  "name": "@mandate/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && cp landing/index.html landing/styles.css landing/script.js dist/",
+    "preview": "vite preview",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "vite": "^6.0.7",
+    "vitest": "^3.0.5"
+  }
+}

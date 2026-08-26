@@ -1,6 +1,11 @@
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
 import { config } from './config.ts';
 import { close, query } from '@mandate/db';
+import { registerDashboardRoutes } from './dashboard.ts';
 import { registerWebhookRoutes } from './webhook.ts';
 
 const REDACTED_KEYS = [
@@ -34,6 +39,20 @@ app.get('/health', async () => {
 });
 
 registerWebhookRoutes(app);
+registerDashboardRoutes(app);
+
+const webRoot = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+if (existsSync(webRoot)) {
+  await app.register(fastifyStatic, { root: webRoot });
+  app.get('/dashboard', async (_request, reply) => reply.sendFile('dashboard.html'));
+  app.setNotFoundHandler((request, reply) => {
+    if (request.url.startsWith('/api') || request.url.startsWith('/webhooks')) {
+      return reply.code(404).send({ error: 'not found' });
+    }
+    if (request.url.startsWith('/dashboard')) return reply.sendFile('dashboard.html');
+    return reply.sendFile('index.html');
+  });
+}
 
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ event: 'shutdown', signal });
