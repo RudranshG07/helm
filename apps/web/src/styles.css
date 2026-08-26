@@ -62,3 +62,36 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 
 .attempts-left { font-variant-numeric: tabular-nums; }
 .attempts-left.low { color: var(--critical); font-weight: 600; }
+
+.decision-list { display: flex; flex-direction: column; gap: 10px; }
+
+.decision {
+  display: grid; grid-template-columns: 88px 1fr; gap: 16px;
+  padding: 14px 16px; background: var(--panel);
+  border: 1px solid var(--line); border-left-width: 3px; border-radius: 10px;
+}
+.decision.ALLOW { border-left-color: var(--healthy); }
+.decision.DENY  { border-left-color: var(--critical); }
+.decision.DEFER { border-left-color: var(--at-risk); }
+
+.decision .verdict { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; align-self: start; padding-top: 2px; }
+.decision.ALLOW .verdict { color: var(--healthy); }
+.decision.DENY  .verdict { color: var(--critical); }
+.decision.DEFER .verdict { color: var(--at-risk); }
+
+.decision .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.decision .rule { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; color: var(--text); }
+.decision .action { color: var(--muted); font-size: 12px; }
+.decision .when { margin-left: auto; color: var(--muted); font-size: 12px; }
+.decision .explanation { font-size: 13px; }
+.decision .rationale { margin-top: 6px; color: var(--muted); font-size: 13px; font-style: italic; }
+.decision .scheduled { margin-top: 6px; color: var(--muted); font-size: 12px; }
+
+.rule-counts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.rule-count {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--panel); font-size: 12px;
+}
+.rule-count .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+.rule-count .n { color: var(--muted); font-variant-numeric: tabular-nums; }

@@ -40,6 +40,28 @@ export interface UnmappedRow extends DeclineRow {
   last_seen: string;
 }
 
+export interface DecisionRow {
+  id: number;
+  subscription_id: string;
+  proposed_action: string;
+  proposed_by: string;
+  verdict: 'ALLOW' | 'DENY' | 'DEFER';
+  rule_id: string;
+  scheduled_for: string | null;
+  proposed_for: string | null;
+  rationale: string | null;
+  explanation: string | null;
+  created_at: string;
+  executed_at: string | null;
+  outcome: string | null;
+}
+
+export interface DenialRow {
+  rule_id: string;
+  verdict: string;
+  count: number;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path);
   if (!res.ok) throw new Error(`${path} responded ${res.status}`);
@@ -50,4 +72,5 @@ export const api = {
   overview: () => get<Overview>('/api/overview'),
   atRisk: () => get<{ subscriptions: AtRiskRow[] }>('/api/at-risk'),
   declines: () => get<{ distribution: DeclineRow[]; unmapped: UnmappedRow[] }>('/api/declines'),
+  decisions: () => get<{ decisions: DecisionRow[]; denials_by_rule: DenialRow[] }>('/api/decisions'),
 };
