@@ -1,12 +1,16 @@
 import { close } from '@mandate/db';
 import { config } from './config.ts';
 import { decideBatch, makeProposalClient } from './decide.ts';
+import { dispatchDue } from './dispatch.ts';
+import { reconcileStuck } from './executor.ts';
+import { RefusingGateway } from './gateway.ts';
 import { ingestBatch } from './ingest.ts';
 import { log } from './log.ts';
 
 let running = true;
 
 const agent = makeProposalClient();
+const gateway = new RefusingGateway();
 
 async function tick(): Promise<void> {
   const processed = await ingestBatch();
@@ -16,6 +20,16 @@ async function tick(): Promise<void> {
   const decided = await decideBatch(agent);
   if (decided > 0) {
     log.info('decide.batch', { decided });
+  }
+
+  const dispatched = await dispatchDue(gateway);
+  if (dispatched > 0) {
+    log.info('dispatch.batch', { dispatched });
+  }
+
+  const reconciled = await reconcileStuck(gateway);
+  if (reconciled > 0) {
+    log.info('reconcile.batch', { reconciled });
   }
 }
 

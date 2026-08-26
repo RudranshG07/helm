@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch src/index.ts",
     "start": "node src/index.ts",
-    "test": "vitest run --passWithNoTests"
+    "test": "DATABASE_URL=${DATABASE_URL:-postgres://mandate:mandate@localhost:5433/mandate_rescue} vitest run --passWithNoTests"
   },
   "dependencies": {
     "@mandate/core": "workspace:*",
