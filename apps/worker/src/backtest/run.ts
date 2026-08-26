@@ -72,11 +72,11 @@ export async function runBacktest(merchantId?: string): Promise<BacktestResult> 
   const tiers: Record<string, number> = {};
   const subscriptions = new Set<string>();
 
-  let defaultAttemptsSpent = 0;
-  let defaultOnHard = 0;
+  const countedDefaultAttempts = new Set<number>();
+  const countedHardAttempts = new Set<number>();
+  const countedPeakAttempts = new Set<number>();
   let ourAuthorised = 0;
   let ourRescheduled = 0;
-  let defaultInPeak = 0;
   let notSpent = 0;
   let recovered = 0;
   let atRisk = 0;
@@ -141,8 +141,12 @@ export async function runBacktest(merchantId?: string): Promise<BacktestResult> 
     const wasted = isHard(classification.bucket) ? defaultAttempts : 0;
 
     subscriptions.add(failure.subscription_id);
-    defaultAttemptsSpent += defaultAttempts;
-    defaultOnHard += wasted;
+    for (const a of after) {
+      if (a.initiated_by !== 'razorpay_default') continue;
+      countedDefaultAttempts.add(a.id);
+      if (isHard(classification.bucket)) countedHardAttempts.add(a.id);
+      if (isPeak(a.attempted_at)) countedPeakAttempts.add(a.id);
+    }
     atRisk += failure.amount_paise;
     if (defaultRecovered) recovered += failure.amount_paise;
 
@@ -155,14 +159,16 @@ export async function runBacktest(merchantId?: string): Promise<BacktestResult> 
       ourAuthorised += 1;
       if (timingAdjusted) ourRescheduled += 1;
     } else {
-      refusals[verdict.rule_id] = (refusals[verdict.rule_id] ?? 0) + 1;
+      const key = verdict.verdict === 'ALLOW'
+        ? `action:${proposal.action}`
+        : verdict.rule_id;
+      refusals[key] = (refusals[key] ?? 0) + 1;
       if (proposal.action !== 'RETRY_SCHEDULED') notSpent += defaultAttempts;
     }
 
     const inPeak = after.filter(
       (a) => a.initiated_by === 'razorpay_default' && isPeak(a.attempted_at),
     ).length;
-    defaultInPeak += inPeak;
 
     points.push({
       subscription_id: failure.subscription_id,
@@ -192,11 +198,11 @@ export async function runBacktest(merchantId?: string): Promise<BacktestResult> 
       failures_examined: failures.length,
       subscriptions: subscriptions.size,
       amount_at_risk_paise: atRisk,
-      default_attempts_spent: defaultAttemptsSpent,
-      default_attempts_on_hard_declines: defaultOnHard,
+      default_attempts_spent: countedDefaultAttempts.size,
+      default_attempts_on_hard_declines: countedHardAttempts.size,
       our_attempts_authorised: ourAuthorised,
       our_attempts_rescheduled: ourRescheduled,
-      default_attempts_in_peak_windows: defaultInPeak,
+      default_attempts_in_peak_windows: countedPeakAttempts.size,
       our_refusals_by_rule: refusals,
       attempts_we_would_not_have_spent: notSpent,
       amount_recovered_by_default_paise: recovered,

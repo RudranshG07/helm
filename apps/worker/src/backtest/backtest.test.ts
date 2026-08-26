@@ -251,3 +251,23 @@ describe('a timing adjustment is not a refusal', () => {
     expect(Object.keys(result.totals.our_refusals_by_rule).length).toBeGreaterThan(0);
   });
 });
+
+describe('an approval is never reported as a refusal', () => {
+  it('labels a hard-customer stop by its action, not by R-OK', async () => {
+    await reset();
+    await attempt({ at: '2026-06-01T06:00:00Z', status: 'failed', reason: 'payment_cancelled' });
+
+    const result = await runBacktest(MERCHANT);
+    expect(result.totals.our_refusals_by_rule['R-OK']).toBeUndefined();
+    expect(result.totals.our_refusals_by_rule['action:STOP']).toBe(1);
+  });
+
+  it('renders the action label in plain words', async () => {
+    await reset();
+    await attempt({ at: '2026-06-01T06:00:00Z', status: 'failed', reason: 'invalid_vpa' });
+
+    const md = renderBacktest(await runBacktest(MERCHANT), 'test mode');
+    expect(md).toContain('chose reauth outreach instead');
+    expect(md).not.toContain('| `R-OK` |');
+  });
+})

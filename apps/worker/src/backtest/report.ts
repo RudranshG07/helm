@@ -71,11 +71,16 @@ export function renderBacktest(result: BacktestResult, provenance: string): stri
 
   const refusals = Object.entries(t.our_refusals_by_rule).sort((a, b) => b[1] - a[1]);
   if (refusals.length > 0) {
-    lines.push('## Why this policy refused');
+    lines.push('## Why no retry was authorised');
     lines.push('');
-    lines.push('| rule | count |');
+    lines.push('| reason | count |');
     lines.push('|---|---|');
-    for (const [rule, count] of refusals) lines.push(`| \`${rule}\` | ${count} |`);
+    for (const [rule, count] of refusals) {
+      const label = rule.startsWith('action:')
+        ? `chose ${rule.slice(7).replace(/_/g, ' ').toLowerCase()} instead`
+        : `\`${rule}\``;
+      lines.push(`| ${label} | ${count} |`);
+    }
     lines.push('');
   }
 
