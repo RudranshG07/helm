@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
-import type { AtRiskRow, DeclineRow, DecisionRow, DenialRow, Overview, UnmappedRow } from './api.ts';
+import type { AtRiskRow, Control, DeclineRow, DecisionRow, DenialRow, Overview, UnmappedRow } from './api.ts';
+import { ChargeQueue, KillSwitch, MandateDetail, Merchants, Reports } from './views.tsx';
 import { bucketLabel, compactRupees, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
 
 interface Data {
@@ -12,20 +13,54 @@ interface Data {
   denials: DenialRow[];
 }
 
-function Masthead({ mode }: { mode: string | null }) {
+const TABS = [
+  { route: '', label: 'Overview' },
+  { route: 'queue', label: 'Charge queue' },
+  { route: 'merchants', label: 'Merchants' },
+  { route: 'reports', label: 'Reports' },
+] as const;
+
+function Masthead({ mode, route, killed }: { mode: string | null; route: string; killed: boolean }) {
   const live = mode === 'live';
   return (
     <header className="masthead">
-      <a className="wordmark" href="/">Helm</a>
+      <a className="wordmark" href="#/">Helm</a>
+      <nav className="tabs" aria-label="Sections">
+        {TABS.map((t) => (
+          <a
+            key={t.route}
+            className={`tab${route === t.route ? ' is-current' : ''}`}
+            href={`#/${t.route}`}
+            aria-current={route === t.route ? 'page' : undefined}
+          >
+            {t.label}
+          </a>
+        ))}
+      </nav>
       <div className="meta">
+        {killed && <span className="mode is-live"><span className="dot" aria-hidden="true" />halted</span>}
         <span className={`mode${live ? ' is-live' : ''}`}>
           <span className="dot" aria-hidden="true" />
           {live ? 'live' : 'test mode'}
         </span>
-        <span>read-only</span>
       </div>
     </header>
   );
+}
+
+function useHashRoute(): { route: string; param: string | null } {
+  const read = () => {
+    const raw = window.location.hash.replace(/^#\/?/, '');
+    const [head, ...rest] = raw.split('/');
+    return { route: head ?? '', param: rest.length > 0 ? decodeURIComponent(rest.join('/')) : null };
+  };
+  const [state, setState] = useState(read);
+  useEffect(() => {
+    const on = () => setState(read());
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  return state;
 }
 
 function Headline({ o }: { o: Overview }) {
@@ -155,7 +190,11 @@ function AtRisk({ rows }: { rows: AtRiskRow[] }) {
             const last = r.attempts_remaining <= 1;
             return (
               <tr key={r.subscription_id}>
-                <td><span className="ref">{r.customer_ref}</span></td>
+                <td>
+                  <a className="ref link" href={`#/mandate/${encodeURIComponent(r.subscription_id)}`}>
+                    {r.customer_ref}
+                  </a>
+                </td>
                 <td>{humanMethod(r.method)}</td>
                 <td className="num amount">{rupees(r.amount_paise)}</td>
                 <td><span className={`badge ${r.risk_band ?? 'UNKNOWN'}`}>{bucketLabel(r.risk_band)}</span></td>
@@ -260,7 +299,7 @@ function Unmapped({ rows }: { rows: UnmappedRow[] }) {
 function Loading() {
   return (
     <div className="shell">
-      <Masthead mode={null} />
+      <Masthead mode={null} route="" killed={false} />
       <div className="skeleton figure" />
       <div className="skeleton tall" />
       <div className="skeleton tall" />
@@ -273,12 +312,15 @@ export default function App() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<string | null>(null);
+  const [control, setControl] = useState<Control | null>(null);
+  const { route, param } = useHashRoute();
 
   const load = useCallback(async () => {
     try {
-      const [overview, atRiskRes, declines, decisions, health] = await Promise.all([
-        api.overview(), api.atRisk(), api.declines(), api.decisions(), api.health(),
+      const [overview, atRiskRes, declines, decisions, health, ctrl] = await Promise.all([
+        api.overview(), api.atRisk(), api.declines(), api.decisions(), api.health(), api.control(),
       ]);
+      setControl(ctrl);
       setData({
         overview,
         atRisk: atRiskRes.subscriptions,
@@ -303,7 +345,7 @@ export default function App() {
   if (error) {
     return (
       <div className="shell">
-        <Masthead mode={mode} />
+        <Masthead mode={mode} route={route} killed={false} />
         <div className="state is-error">
           <strong>Could not reach the API</strong>
           {error}
@@ -316,9 +358,33 @@ export default function App() {
 
   if (!data) return <Loading />;
 
+  if (route === 'mandate' && param) {
+    return (
+      <div className="shell">
+        <Masthead mode={mode} route="" killed={control?.kill_switch ?? false} />
+        <a className="back" href="#/">&larr; All mandates</a>
+        <MandateDetail id={param} />
+      </div>
+    );
+  }
+
+  if (route === 'queue' || route === 'merchants' || route === 'reports') {
+    const title = TABS.find((t) => t.route === route)?.label ?? '';
+    return (
+      <div className="shell">
+        <Masthead mode={mode} route={route} killed={control?.kill_switch ?? false} />
+        <div className="section-head"><h2>{title}</h2></div>
+        {route === 'queue' && <ChargeQueue />}
+        {route === 'merchants' && <Merchants />}
+        {route === 'reports' && <Reports slug={param} />}
+      </div>
+    );
+  }
+
   return (
     <div className="shell">
-      <Masthead mode={mode} />
+      <Masthead mode={mode} route={route} killed={control?.kill_switch ?? false} />
+      {control && <KillSwitch control={control} onChange={() => void load()} />}
       <Headline o={data.overview} />
 
       <section aria-labelledby="h-decisions">

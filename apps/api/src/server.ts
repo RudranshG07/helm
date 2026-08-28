@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import { config } from './config.ts';
 import { close, query } from '@mandate/db';
 import { registerChargeQueueRoutes } from './charge-queue.ts';
+import { registerControlRoutes } from './control.ts';
 import { registerDashboardRoutes } from './dashboard.ts';
 import { registerWebhookRoutes } from './webhook.ts';
 
@@ -29,8 +30,17 @@ app.addContentTypeParser(
   'application/json',
   { parseAs: 'buffer' },
   (req, body, done) => {
-    (req as { rawBody?: Buffer }).rawBody = body as Buffer;
-    done(null, undefined);
+    const raw = body as Buffer;
+    (req as { rawBody?: Buffer }).rawBody = raw;
+    if (raw.length === 0) {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(raw.toString('utf8')));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
   },
 );
 
@@ -42,6 +52,7 @@ app.get('/health', async () => {
 registerWebhookRoutes(app);
 registerDashboardRoutes(app);
 registerChargeQueueRoutes(app);
+registerControlRoutes(app);
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
 if (existsSync(webRoot)) {

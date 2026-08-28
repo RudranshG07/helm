@@ -54,6 +54,9 @@ export interface DecisionRow {
   created_at: string;
   executed_at: string | null;
   outcome: string | null;
+  explored?: boolean;
+  logging_propensity?: number | null;
+  expected_paise?: number | null;
 }
 
 export interface DenialRow {
@@ -74,8 +77,104 @@ export interface Health {
   dry_run: boolean;
 }
 
+export interface Merchant {
+  id: string;
+  name: string;
+  mode: string;
+  integration: string | null;
+  write_enabled: boolean;
+  cross_merchant_signals: boolean;
+  consent_signed_at: string | null;
+  subscriptions: number;
+}
+
+export interface Control {
+  kill_switch: boolean;
+  kill_switch_reason: string | null;
+  updated_at: string;
+  dry_run: boolean;
+  mode: string;
+  release_requires_token: boolean;
+}
+
+export interface QueueRow {
+  subscription_id: string;
+  customer_ref: string;
+  method: string;
+  amount_paise: number;
+  risk_band: string;
+  attempts_remaining: number;
+  last_error_reason: string | null;
+  last_bucket: string | null;
+  chargeable: boolean;
+  blocked_reason: string | null;
+}
+
+export interface AttemptRow {
+  rzp_payment_id: string | null;
+  attempted_at: string;
+  status: string;
+  amount_paise: number;
+  error_reason: string | null;
+  error_source: string | null;
+  bucket: string | null;
+  initiated_by: string;
+  source: string;
+  counts_against_budget: boolean;
+}
+
+export interface IntentRow {
+  idempotency_key: string;
+  state: string;
+  attempt_number: number;
+  amount_paise: number;
+  scheduled_for: string;
+  dry_run: boolean;
+  amount_mismatch: boolean;
+  created_at: string;
+  settled_at: string | null;
+  last_error: string | null;
+}
+
+export interface HealthRow {
+  scored_at: string;
+  risk_score: number;
+  risk_band: string;
+  consecutive_failures: number;
+  attempts_remaining: number;
+  days_to_expiry: number | null;
+  contributions: Record<string, number>;
+}
+
+export interface Detail {
+  subscription: Record<string, unknown>;
+  attempts: AttemptRow[];
+  decisions: DecisionRow[];
+  health: HealthRow[];
+  intents: IntentRow[];
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const parsed = (await res.json()) as T & { error?: string };
+  if (!res.ok) throw new Error(parsed.error ?? `${path} responded ${res.status}`);
+  return parsed;
+}
+
 export const api = {
   health: () => get<Health>('/health'),
+  merchants: () => get<{ merchants: Merchant[] }>('/api/merchants'),
+  control: () => get<Control>('/api/control'),
+  setKillSwitch: (engaged: boolean, token?: string, reason?: string) =>
+    post<{ kill_switch: boolean }>('/api/control/kill-switch', { engaged, token, reason }),
+  chargeQueue: () => get<{ queue: QueueRow[]; note: string }>('/api/charge-queue'),
+  reports: () => get<{ reports: { slug: string; file: string }[] }>('/api/reports'),
+  report: (slug: string) => get<{ slug: string; markdown: string }>(`/api/reports/${slug}`),
+  detail: (id: string) => get<Detail>(`/api/subscriptions/${encodeURIComponent(id)}`),
   overview: () => get<Overview>('/api/overview'),
   atRisk: () => get<{ subscriptions: AtRiskRow[] }>('/api/at-risk'),
   declines: () => get<{ distribution: DeclineRow[]; unmapped: UnmappedRow[] }>('/api/declines'),

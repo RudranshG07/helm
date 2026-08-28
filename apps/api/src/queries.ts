@@ -97,14 +97,16 @@ export async function subscriptionDetail(id: string) {
     query(`SELECT * FROM subscription WHERE id = $1`, [id]),
     query(
       `SELECT rzp_payment_id, attempted_at, status, amount_paise, error_reason,
-              error_source, bucket, initiated_by, taxonomy_version
+              error_source, error_step, COALESCE(bucket, 'UNKNOWN') AS bucket,
+              initiated_by, source, taxonomy_version, counts_against_budget
          FROM payment_attempt WHERE subscription_id = $1
-        ORDER BY attempted_at DESC LIMIT 50`,
+        ORDER BY attempted_at DESC LIMIT 100`,
       [id],
     ),
     query(
-      `SELECT proposed_action, verdict, rule_id, scheduled_for, proposed_for,
-              rationale, explanation, created_at, outcome
+      `SELECT id, proposed_action, proposed_by, verdict, rule_id, scheduled_for, proposed_for,
+              rationale, explanation, created_at, outcome,
+              logging_propensity::float8 AS logging_propensity, explored, expected_paise
          FROM decision WHERE subscription_id = $1
         ORDER BY created_at DESC, id DESC LIMIT 50`,
       [id],
@@ -119,11 +121,21 @@ export async function subscriptionDetail(id: string) {
   ]);
 
   if (!sub.rows[0]) return null;
+
+  const intents = await query(
+    `SELECT idempotency_key, state, attempt_number, amount_paise, scheduled_for,
+            dry_run, amount_mismatch, created_at, settled_at, last_error
+       FROM execution_intent WHERE subscription_id = $1
+      ORDER BY created_at DESC LIMIT 50`,
+    [id],
+  );
+
   return {
     subscription: sub.rows[0],
     attempts: attempts.rows,
     decisions: decisions.rows,
     health: health.rows,
+    intents: intents.rows,
   };
 }
 
