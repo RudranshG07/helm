@@ -8,5 +8,6 @@ export * from './liquidity.ts';
 export * from './idempotency.ts';
 export * from './degradation.ts';
 export * from './holidays.ts';
+export * from './contention.ts';
 export * from './agent.ts';
 export * from './agent-clients.ts';
