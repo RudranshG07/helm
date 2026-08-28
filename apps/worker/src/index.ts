@@ -4,14 +4,14 @@ import { decideBatch, makeProposalClient } from './decide.ts';
 import { rollupDegradation } from './degradation.ts';
 import { dispatchDue } from './dispatch.ts';
 import { reconcileStuck } from './executor.ts';
-import { RefusingGateway } from './gateway.ts';
+import { makeGateway } from './gateway-factory.ts';
 import { ingestBatch } from './ingest.ts';
 import { log } from './log.ts';
 
 let running = true;
 
 const agent = makeProposalClient();
-const gateway = new RefusingGateway();
+const gateway = makeGateway();
 
 async function tick(): Promise<void> {
   const processed = await ingestBatch();

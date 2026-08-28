@@ -3,6 +3,7 @@ import type { NormalizedAttempt, NormalizedSubscription, RazorpayEvent } from '@
 import { withTransaction } from '@mandate/db';
 import type { PoolClient } from 'pg';
 import { config } from './config.ts';
+import { recordRazorpayDowntime } from './degradation.ts';
 import { log } from './log.ts';
 
 interface RawEventRow {
@@ -151,6 +152,39 @@ async function rescore(client: PoolClient, subscriptionId: string, cycle: Date):
   );
 }
 
+interface DowntimeEntity {
+  method?: string;
+  severity?: string;
+  begin?: number;
+  end?: number | null;
+  instrument?: { issuer?: string; bank?: string };
+}
+
+async function handleDowntime(row: RawEventRow): Promise<void> {
+  const payload = row.payload as unknown as {
+    payload?: { payment?: { downtime?: { entity?: DowntimeEntity } } };
+  };
+  const entity = payload?.payload?.payment?.downtime?.entity;
+  if (!entity?.method) {
+    log.warn('downtime.unrecognised_payload', { raw_event_id: row.id, event_type: row.event_type });
+    return;
+  }
+
+  const resolved = row.event_type === 'payment.downtime.resolved';
+  const issuer = entity.instrument?.issuer ?? entity.instrument?.bank ?? null;
+  const method = entity.method === 'upi' ? 'upi_autopay' : entity.method;
+
+  await recordRazorpayDowntime({
+    issuer,
+    method,
+    severity: entity.severity ?? null,
+    started_at: entity.begin ? new Date(entity.begin * 1000) : new Date(),
+    resolved,
+  });
+
+  log.info('downtime.recorded', { issuer, method, resolved, severity: entity.severity ?? null });
+}
+
 export async function ingestBatch(): Promise<number> {
   return withTransaction(async (client) => {
     const { rows } = await client.query<RawEventRow>(
@@ -165,6 +199,12 @@ export async function ingestBatch(): Promise<number> {
 
     for (const row of rows) {
       try {
+        if (row.event_type.startsWith('payment.downtime.')) {
+          await handleDowntime(row);
+          await client.query('UPDATE raw_event SET processed_at = now() WHERE id = $1', [row.id]);
+          continue;
+        }
+
         const { subscription, attempt } = normalize(row.payload);
         const merchantId = row.merchant_id ?? DEFAULT_MERCHANT;
 

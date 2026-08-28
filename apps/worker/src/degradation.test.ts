@@ -1,12 +1,14 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { close, query } from '@mandate/db';
 import { isDegraded, leadTimes, recordRazorpayDowntime, rollupDegradation } from './degradation.ts';
+import { ingestBatch } from './ingest.ts';
 
 const MERCHANT = 'merchant_degradation_test';
 const SUB = `${MERCHANT}:sub_deg`;
 const CYCLE = new Date('2026-09-01T00:00:00.000Z');
 
 async function reset() {
+  await query(`DELETE FROM raw_event`);
   await query(`DELETE FROM degradation_signal`);
   await query(`DELETE FROM payment_attempt WHERE subscription_id = $1`, [SUB]);
   await query(`DELETE FROM subscription WHERE id = $1`, [SUB]);
@@ -182,5 +184,67 @@ describe('the two signals are stored side by side', () => {
     const lead = await leadTimes();
     expect(lead).toHaveLength(1);
     expect(lead[0]!.lead_seconds).toBeLessThan(0);
+  });
+});
+
+describe('downtime webhooks reach the degradation signal', () => {
+  async function ingestDowntime(eventType: string, entity: Record<string, unknown>) {
+    await query(
+      `INSERT INTO raw_event (rzp_event_id, event_type, payload, signature_ok)
+       VALUES ($1, $2, $3, TRUE)`,
+      [
+        `evt_${eventType}_${Math.random()}`,
+        eventType,
+        { event: eventType, payload: { payment: { downtime: { entity } } } },
+      ],
+    );
+    await ingestBatch();
+  }
+
+  it('opens a signal when the gateway reports downtime started', async () => {
+    await reset();
+    await ingestDowntime('payment.downtime.started', {
+      method: 'upi', severity: 'high',
+      begin: Math.floor(Date.now() / 1000),
+      instrument: { issuer: 'HDFC' },
+    });
+    expect(await isDegraded('HDFC', 'upi_autopay')).toBe(true);
+  });
+
+  it('maps the gateway method name onto ours', async () => {
+    await reset();
+    await ingestDowntime('payment.downtime.started', {
+      method: 'upi', severity: 'high', begin: Math.floor(Date.now() / 1000),
+      instrument: { issuer: 'SBI' },
+    });
+    const { rows } = await query<{ method: string }>(
+      `SELECT method FROM degradation_signal WHERE source = 'razorpay_downtime'`,
+    );
+    expect(rows[0]!.method).toBe('upi_autopay');
+  });
+
+  it('closes the signal when the gateway reports it resolved', async () => {
+    await reset();
+    const begin = Math.floor(Date.now() / 1000);
+    await ingestDowntime('payment.downtime.started', { method: 'upi', severity: 'high', begin, instrument: { issuer: 'HDFC' } });
+    await ingestDowntime('payment.downtime.resolved', { method: 'upi', begin, instrument: { issuer: 'HDFC' } });
+    expect(await isDegraded('HDFC', 'upi_autopay')).toBe(false);
+  });
+
+  it('does not throw on a downtime payload it does not recognise', async () => {
+    await reset();
+    await expect(ingestDowntime('payment.downtime.started', {})).resolves.not.toThrow();
+    expect(await isDegraded(null, 'upi_autopay')).toBe(false);
+  });
+
+  it('marks the event processed so it is not retried forever', async () => {
+    await reset();
+    await ingestDowntime('payment.downtime.started', {
+      method: 'upi', severity: 'low', begin: Math.floor(Date.now() / 1000), instrument: { issuer: 'AXIS' },
+    });
+    const { rows } = await query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM raw_event WHERE processed_at IS NULL`,
+    );
+    expect(rows[0]!.n).toBe(0);
   });
 });
