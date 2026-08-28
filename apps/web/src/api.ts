@@ -16,7 +16,7 @@ export interface AtRiskRow {
   method: string;
   amount_paise: number;
   status: string;
-  risk_band: 'healthy' | 'at_risk' | 'critical';
+  risk_band: 'healthy' | 'at_risk' | 'critical' | null;
   risk_score: number;
   consecutive_failures: number;
   attempts_remaining: number;
@@ -27,7 +27,7 @@ export interface AtRiskRow {
 }
 
 export interface DeclineRow {
-  bucket: string;
+  bucket: string | null;
   error_reason: string | null;
   error_source: string | null;
   method: string;
@@ -68,7 +68,14 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface Health {
+  ok: boolean;
+  mode: string;
+  dry_run: boolean;
+}
+
 export const api = {
+  health: () => get<Health>('/health'),
   overview: () => get<Overview>('/api/overview'),
   atRisk: () => get<{ subscriptions: AtRiskRow[] }>('/api/at-risk'),
   declines: () => get<{ distribution: DeclineRow[]; unmapped: UnmappedRow[] }>('/api/declines'),

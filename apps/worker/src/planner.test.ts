@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PDN_MIN_LEAD_MS, SuccessModel, isPeak, toIstParts } from '@mandate/core';
 import type { Plan } from '@mandate/core';
-import { buildPlan, candidateSlots, planToProposal } from './planner.ts';
+import { buildPlan, candidateSlots, explorePlan, planToProposal } from './planner.ts';
 import type { PlanRequest } from './planner.ts';
 
 const NOW = new Date('2026-09-01T02:30:00.000Z');
@@ -69,6 +69,7 @@ describe('plans map onto proposals the policy engine understands', () => {
     value_of_waiting_paise: 0,
     best_immediate_paise: 60000,
     schedule: [{ action: 'RETRY', at: new Date(), days_from_now: 2, expected_paise: 60000, p_success: 0.42, evidence: 12, level: 'cell' }],
+    ranked_slots: [],
     reason: 'because',
   };
 
@@ -129,5 +130,48 @@ describe('the plan is economically coherent', () => {
 
   it('always produces a reason a merchant can read', () => {
     expect(buildPlan(req(), new SuccessModel([])).reason.length).toBeGreaterThan(20);
+  });
+});
+
+describe('exploration records the propensity that makes evaluation possible', () => {
+  it('takes the best slot most of the time and records its propensity', () => {
+    const plan = buildPlan(req(), new SuccessModel([]));
+    const out = explorePlan(plan, 0.15, 0.5);
+    expect(out.explored).toBe(false);
+    expect(out.logging_propensity).toBeCloseTo(0.85, 5);
+    expect(out.target_propensity).toBe(1);
+  });
+
+  it('sometimes takes an alternative, and marks the target propensity zero for it', () => {
+    const plan = buildPlan(req(), new SuccessModel([]));
+    const out = explorePlan(plan, 0.5, 0.99);
+    if (out.explored) {
+      expect(out.target_propensity).toBe(0);
+      expect(out.logging_propensity).toBeLessThan(1);
+    }
+  });
+
+  it('reports propensity one for an action with no slots to choose between', () => {
+    const plan = buildPlan(req({ days_to_halt: 0 }), new SuccessModel([]));
+    const out = explorePlan(plan, 0.3, 0.5);
+    expect(out.logging_propensity).toBe(1);
+    expect(out.explored).toBe(false);
+  });
+
+  it('always chooses a slot the allocator actually ranked', () => {
+    const plan = buildPlan(req(), new SuccessModel([]));
+    for (let d = 0; d < 1; d += 0.05) {
+      const out = explorePlan(plan, 0.4, d);
+      if (out.chosen_at) {
+        expect(plan.ranked_slots.some((s) => s.at.getTime() === out.chosen_at!.getTime())).toBe(true);
+      }
+    }
+  });
+
+  it('ranks slots by value, best first', () => {
+    const plan = buildPlan(req(), new SuccessModel([]));
+    for (let i = 1; i < plan.ranked_slots.length; i += 1) {
+      expect(plan.ranked_slots[i - 1]!.value_paise).toBeGreaterThanOrEqual(plan.ranked_slots[i]!.value_paise);
+    }
   });
 });

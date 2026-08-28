@@ -44,7 +44,7 @@ export async function overview(): Promise<Overview> {
         count(DISTINCT error_reason)::int AS unmapped_codes,
         count(*)::int                     AS unmapped_attempts
       FROM payment_attempt
-      WHERE bucket = 'UNKNOWN' AND status = 'failed'
+      WHERE COALESCE(bucket, 'UNKNOWN') = 'UNKNOWN' AND status = 'failed'
     )
     SELECT * FROM bands, subs, attempts, unmapped
   `);
@@ -74,7 +74,7 @@ export async function atRisk(limit = 100): Promise<AtRiskRow[]> {
        s.id AS subscription_id, s.customer_ref, s.method, s.amount_paise, s.status,
        h.risk_band, h.risk_score::float8 AS risk_score, h.consecutive_failures, h.attempts_remaining,
        h.days_to_expiry, h.scored_at,
-       a.bucket AS last_bucket, a.error_reason AS last_error_reason
+       COALESCE(a.bucket, 'UNKNOWN') AS last_bucket, a.error_reason AS last_error_reason
      FROM latest h
      JOIN subscription s ON s.id = h.subscription_id
      LEFT JOIN LATERAL (
@@ -135,7 +135,7 @@ export async function unmappedCodes() {
             max(attempted_at) AS last_seen
        FROM payment_attempt pa
        JOIN subscription s ON s.id = pa.subscription_id
-      WHERE pa.bucket = 'UNKNOWN' AND pa.status = 'failed'
+      WHERE COALESCE(pa.bucket, 'UNKNOWN') = 'UNKNOWN' AND pa.status = 'failed'
       GROUP BY 1,2,3,4
       ORDER BY attempts DESC`,
   );
@@ -144,7 +144,7 @@ export async function unmappedCodes() {
 
 export async function declineDistribution() {
   const { rows } = await query(
-    `SELECT pa.bucket, pa.error_reason, pa.error_source, s.method,
+    `SELECT COALESCE(pa.bucket, 'UNKNOWN') AS bucket, pa.error_reason, pa.error_source, s.method,
             count(*)::int AS attempts,
             sum(pa.amount_paise)::bigint AS amount_paise
        FROM payment_attempt pa

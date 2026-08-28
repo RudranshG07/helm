@@ -13,7 +13,9 @@
     "dev:api": "pnpm --filter @mandate/api dev",
     "dev:worker": "pnpm --filter @mandate/worker dev",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r exec tsc --noEmit"
+    "typecheck": "pnpm -r exec tsc --noEmit",
+    "start": "bash scripts/start.sh",
+    "stop": "docker compose down"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

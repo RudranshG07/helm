@@ -8,7 +8,8 @@ import {
   planRecovery,
   toIstParts,
 } from '@mandate/core';
-import type { Bucket, CandidateSlot, Method, Outcome, Plan, Proposal } from '@mandate/core';
+import { exploreAmong } from '@mandate/core';
+import type { Bucket, CandidateSlot, Method, Outcome, Plan, Proposal, RankedSlot } from '@mandate/core';
 import { query } from '@mandate/db';
 
 const CANDIDATE_HOURS = [8, 14, 15, 22];
@@ -149,4 +150,51 @@ export function peakWindowsIst(): ReadonlyArray<readonly [number, number]> {
 
 function round(n: number): number {
   return Math.round(Math.min(1, Math.max(0, n)) * 1000) / 1000;
+}
+
+export interface ExploredPlan {
+  plan: Plan;
+  chosen_at: Date | null;
+  logging_propensity: number;
+  target_propensity: number;
+  explored: boolean;
+  slots_considered: number;
+}
+
+export function explorePlan(plan: Plan, epsilon: number, draw: number): ExploredPlan {
+  const ranked: RankedSlot[] = plan.ranked_slots;
+
+  if (plan.action !== 'RETRY' || ranked.length === 0) {
+    return {
+      plan,
+      chosen_at: plan.at,
+      logging_propensity: 1,
+      target_propensity: 1,
+      explored: false,
+      slots_considered: ranked.length,
+    };
+  }
+
+  const choice = exploreAmong(ranked, epsilon, draw);
+  if (!choice) {
+    return {
+      plan,
+      chosen_at: plan.at,
+      logging_propensity: 1,
+      target_propensity: 1,
+      explored: false,
+      slots_considered: 0,
+    };
+  }
+
+  const isBest = choice.chosen.at.getTime() === ranked[0]!.at.getTime();
+
+  return {
+    plan: { ...plan, at: choice.chosen.at },
+    chosen_at: choice.chosen.at,
+    logging_propensity: choice.propensity,
+    target_propensity: isBest ? 1 : 0,
+    explored: !isBest,
+    slots_considered: choice.considered,
+  };
 }

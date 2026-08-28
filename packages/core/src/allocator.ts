@@ -31,6 +31,12 @@ export interface PlanStep {
   level: Prediction['level'] | null;
 }
 
+export interface RankedSlot {
+  at: Date;
+  value_paise: number;
+  p_success: number;
+}
+
 export interface Plan {
   action: PlanAction;
   at: Date | null;
@@ -38,6 +44,7 @@ export interface Plan {
   value_of_waiting_paise: number;
   best_immediate_paise: number;
   schedule: PlanStep[];
+  ranked_slots: RankedSlot[];
   reason: string;
 }
 
@@ -171,6 +178,23 @@ export function planRecovery(input: AllocatorInput, model: SuccessModel): Plan {
     d = Math.max(0, d - 1);
   }
 
+  const ranked: RankedSlot[] = [];
+  for (const [dayOffset, slots] of byDay) {
+    const d = horizon - dayOffset;
+    if (d < 0 || d > horizon) continue;
+    for (const c of slots) {
+      const p = predictions.get(c)!.p;
+      const remainingAfter = Math.max(0, d - 1);
+      const continuation = attempts > 0 ? V[Math.max(0, attempts - 1)]![remainingAfter]! : 0;
+      ranked.push({
+        at: c.at,
+        value_paise: Math.round(p * successValue + (1 - p) * continuation),
+        p_success: p,
+      });
+    }
+  }
+  ranked.sort((a, b) => b.value_paise - a.value_paise || a.at.getTime() - b.at.getTime());
+
   const earliestDay = [...byDay.keys()].sort((a, b) => a - b)[0];
   const immediateCandidates = earliestDay === undefined ? [] : byDay.get(earliestDay) ?? [];
   const bestImmediate = immediateCandidates.reduce((acc, c) => {
@@ -190,6 +214,7 @@ export function planRecovery(input: AllocatorInput, model: SuccessModel): Plan {
     best_immediate_paise: Math.round(bestImmediate),
     value_of_waiting_paise: Math.round(top - bestImmediate),
     schedule,
+    ranked_slots: ranked,
     reason: explain(first, top, bestImmediate, input),
   };
 }

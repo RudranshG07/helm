@@ -15,7 +15,7 @@ import { withTransaction } from '@mandate/db';
 import type { PoolClient } from 'pg';
 import { config } from './config.ts';
 import { isDegraded } from './degradation.ts';
-import { buildPlan, loadOutcomes, planToProposal } from './planner.ts';
+import { buildPlan, explorePlan, loadOutcomes, planToProposal } from './planner.ts';
 import { log } from './log.ts';
 
 interface Candidate {
@@ -234,7 +234,8 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
       model,
     );
 
-    const planned = planToProposal(plan, row.subscription_id);
+    const explored = explorePlan(plan, config.explorationEpsilon, Math.random());
+    const planned = planToProposal(explored.plan, row.subscription_id);
     const outcome = await agent.propose(ctx);
 
     const policyCtx = { ...buildPolicyContext(row, now, degraded), kill_switch: killed };
@@ -266,13 +267,16 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
         `INSERT INTO decision (
            subscription_id, cycle, proposed_action, proposed_by, prompt_version, confidence,
            verdict, rule_id, scheduled_for, proposed_for, rationale, explanation,
-           agent_context, taxonomy_version
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+           agent_context, taxonomy_version,
+           logging_propensity, target_propensity, explored, expected_paise, slots_considered
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [
           row.subscription_id, row.cycle, proposal.action, 'allocator', outcome.prompt_version,
           proposal.confidence, verdict.verdict, verdict.rule_id,
           verdict.scheduled_for ?? null, verdict.proposed_for ?? proposal.scheduled_for ?? null,
           proposal.reason, verdict.explanation, ctx, row.taxonomy_version,
+          explored.logging_propensity, explored.target_propensity, explored.explored,
+          explored.plan.expected_paise, explored.slots_considered,
         ],
       );
     });
@@ -285,6 +289,8 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
       expected_paise: plan.expected_paise,
       value_of_waiting_paise: plan.value_of_waiting_paise,
       evidence: plan.schedule[0]?.evidence ?? 0,
+      explored: explored.explored,
+      logging_propensity: explored.logging_propensity,
     });
   }
 

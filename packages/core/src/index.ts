@@ -11,5 +11,6 @@ export * from './holidays.ts';
 export * from './contention.ts';
 export * from './success-model.ts';
 export * from './allocator.ts';
+export * from './ope.ts';
 export * from './agent.ts';
 export * from './agent-clients.ts';
