@@ -168,10 +168,12 @@ export function planRecovery(input: AllocatorInput, model: SuccessModel): Plan {
     d = Math.max(0, d - 1);
   }
 
-  const immediateCandidates = byDay.get(0) ?? [];
+  const earliestDay = [...byDay.keys()].sort((a, b) => a - b)[0];
+  const immediateCandidates = earliestDay === undefined ? [] : byDay.get(earliestDay) ?? [];
   const bestImmediate = immediateCandidates.reduce((acc, c) => {
     const p = predictions.get(c)!.p;
-    const v = p * input.amount_paise + (1 - p) * (attempts > 1 ? V[attempts - 1]![Math.max(0, horizon - 1)]! : 0);
+    const remaining = Math.max(0, horizon - (earliestDay ?? 0) - 1);
+    const v = p * input.amount_paise + (1 - p) * (attempts > 1 ? V[attempts - 1]![remaining]! : reauthValueAt(0));
     return Math.max(acc, v);
   }, 0);
 
@@ -204,7 +206,7 @@ function explain(
     return 'A fresh authorization is worth more than any remaining attempt on this mandate.';
   }
   if (total - immediate > input.amount_paise * 0.02) {
-    return `Waiting is worth ${r(total - immediate)} more than attempting at the earliest slot (${r(total)} against ${r(immediate)}).`;
+    return `Waiting is worth ${r(total - immediate)} more than taking the earliest legal slot (${r(total)} against ${r(immediate)}).`;
   }
   return `Attempting at the chosen slot is worth ${r(total)} against a mandate of ${r(input.amount_paise)}.`;
 }

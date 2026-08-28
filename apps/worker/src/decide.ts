@@ -1,6 +1,7 @@
 import {
   AnthropicProposalClient,
   MockProposalClient,
+  SuccessModel,
   PDN_MIN_LEAD_MS,
   addMs,
   buildPrompt,
@@ -14,6 +15,7 @@ import { withTransaction } from '@mandate/db';
 import type { PoolClient } from 'pg';
 import { config } from './config.ts';
 import { isDegraded } from './degradation.ts';
+import { buildPlan, loadOutcomes, planToProposal } from './planner.ts';
 import { log } from './log.ts';
 
 interface Candidate {
@@ -44,6 +46,7 @@ interface Candidate {
   issuer: string | null;
   success_days: number[];
   contacts_this_cycle: number;
+  last_failure_at: Date | null;
 }
 
 const CANDIDATES_SQL = `
@@ -54,7 +57,7 @@ WITH latest AS (
 )
 SELECT
   s.id AS subscription_id, s.merchant_id, s.method, s.amount_paise, s.status,
-  COALESCE(s.current_start, to_timestamp(0)) AS cycle, s.current_end, s.mandate_expiry_at,
+  COALESCE(s.current_start, to_timestamp(0)) AS cycle, s.current_end AS cycle_end, s.mandate_expiry_at,
   m.write_enabled,
   h.risk_band, h.risk_score::float8 AS risk_score, h.consecutive_failures,
   h.attempts_remaining, h.days_to_expiry, h.contributions,
@@ -77,6 +80,7 @@ SELECT
      to_timestamp(0)
    ) AND c.soft AND NOT c.paid) AS consecutive_soft_cycles,
   a.error_code, a.error_reason, a.error_source, a.error_step, a.bucket, a.taxonomy_version, a.issuer,
+  a.attempted_at AS last_failure_at,
   COALESCE((
     SELECT array_agg(EXTRACT(DAY FROM attempted_at AT TIME ZONE 'Asia/Kolkata')::int)
       FROM payment_attempt
@@ -89,7 +93,7 @@ FROM latest h
 JOIN subscription s ON s.id = h.subscription_id
 JOIN merchant m ON m.id = s.merchant_id
 LEFT JOIN LATERAL (
-  SELECT error_code, error_reason, error_source, error_step, bucket, taxonomy_version, issuer
+  SELECT error_code, error_reason, error_source, error_step, bucket, taxonomy_version, issuer, attempted_at
     FROM payment_attempt
    WHERE subscription_id = s.id AND status = 'failed'
    ORDER BY attempted_at DESC LIMIT 1
@@ -173,6 +177,16 @@ function buildPolicyContext(row: Candidate, now: Date, degraded: boolean): Polic
   };
 }
 
+function horizonDays(row: Candidate, now: Date): number {
+  const candidates = [
+    row.cycle_end ? (row.cycle_end.getTime() - now.getTime()) / 86_400_000 : null,
+    row.days_to_expiry,
+  ].filter((n): n is number => n !== null && Number.isFinite(n));
+
+  if (candidates.length === 0) return 14;
+  return Math.max(0, Math.floor(Math.min(...candidates)));
+}
+
 async function killSwitchEngaged(client: PoolClient): Promise<boolean> {
   const { rows } = await client.query<{ kill_switch: boolean }>(
     'SELECT kill_switch FROM control_flags WHERE id = 1',
@@ -195,36 +209,52 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
   if (rows.length === 0) return 0;
 
   const killed = await withTransaction(killSwitchEngaged);
+  const model = new SuccessModel(await loadOutcomes());
 
   for (const row of rows) {
     const degraded = await isDegraded(row.issuer, row.method);
     const ctx = buildContext(row, now, degraded);
+
+    const plan = buildPlan(
+      {
+        subscription_id: row.subscription_id,
+        bucket: row.bucket ?? 'UNKNOWN',
+        issuer: row.issuer,
+        method: row.method,
+        amount_paise: row.amount_paise,
+        attempts_remaining: row.attempts_remaining,
+        days_to_halt: horizonDays(row, now),
+        last_failure_at: row.last_failure_at ?? now,
+        reauth_available: row.contacts_this_cycle < 1,
+        now,
+      },
+      model,
+    );
+
+    const planned = planToProposal(plan, row.subscription_id);
     const outcome = await agent.propose(ctx);
 
     const policyCtx = { ...buildPolicyContext(row, now, degraded), kill_switch: killed };
 
-    const proposal = outcome.ok
-      ? outcome.proposal
-      : {
-          subscription_id: row.subscription_id,
-          action: 'HOLD' as const,
-          reason: 'The proposal could not be validated, so no action was taken this cycle.',
-          confidence: 0,
-        };
+    const agentAgrees = outcome.ok && outcome.proposal.action === planned.action;
 
-    const verdict = outcome.ok
-      ? evaluate(proposal, policyCtx)
-      : {
-          verdict: 'DEFER' as const,
-          rule_id: 'R-MALFORMED',
-          explanation: `Agent response rejected: ${outcome.error}`,
-        };
+    const proposal = agentAgrees && outcome.ok
+      ? { ...planned, reason: outcome.proposal.reason }
+      : planned;
+
+    const verdict = evaluate(proposal, policyCtx);
 
     if (!outcome.ok) {
       log.warn('agent.invalid_response', {
         subscription_id: row.subscription_id,
         error: outcome.error,
         model: outcome.model,
+      });
+    } else if (!agentAgrees) {
+      log.info('agent.overruled', {
+        subscription_id: row.subscription_id,
+        agent_action: outcome.proposal.action,
+        planned_action: planned.action,
       });
     }
 
@@ -236,7 +266,7 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
            agent_context, taxonomy_version
          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
-          row.subscription_id, row.cycle, proposal.action, outcome.model, outcome.prompt_version,
+          row.subscription_id, row.cycle, proposal.action, 'allocator', outcome.prompt_version,
           proposal.confidence, verdict.verdict, verdict.rule_id,
           verdict.scheduled_for ?? null, verdict.proposed_for ?? proposal.scheduled_for ?? null,
           proposal.reason, verdict.explanation, ctx, row.taxonomy_version,
@@ -249,6 +279,9 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
       action: proposal.action,
       verdict: verdict.verdict,
       rule_id: verdict.rule_id,
+      expected_paise: plan.expected_paise,
+      value_of_waiting_paise: plan.value_of_waiting_paise,
+      evidence: plan.schedule[0]?.evidence ?? 0,
     });
   }
 
