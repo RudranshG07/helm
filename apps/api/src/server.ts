@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
 import { config } from './config.ts';
 import { close, query } from '@mandate/db';
+import { registerChargeQueueRoutes } from './charge-queue.ts';
 import { registerDashboardRoutes } from './dashboard.ts';
 import { registerWebhookRoutes } from './webhook.ts';
 
@@ -40,6 +41,7 @@ app.get('/health', async () => {
 
 registerWebhookRoutes(app);
 registerDashboardRoutes(app);
+registerChargeQueueRoutes(app);
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
 if (existsSync(webRoot)) {
