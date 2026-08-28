@@ -24,6 +24,7 @@ export interface PlanRequest {
   days_to_halt: number;
   last_failure_at: Date;
   reauth_available: boolean;
+  remaining_cycles: number;
   now: Date;
 }
 
@@ -129,6 +130,7 @@ export function buildPlan(req: PlanRequest, model: SuccessModel): Plan {
   return planRecovery(
     {
       amount_paise: req.amount_paise,
+      mandate_lifetime_paise: req.amount_paise * Math.max(0, req.remaining_cycles),
       attempts_remaining: req.attempts_remaining,
       days_to_halt: Math.min(MAX_HORIZON_DAYS, Math.max(0, Math.floor(req.days_to_halt))),
       candidates: candidateSlots(req),

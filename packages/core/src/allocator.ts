@@ -11,6 +11,7 @@ export interface CandidateSlot {
 
 export interface AllocatorInput {
   amount_paise: number;
+  mandate_lifetime_paise?: number;
   attempts_remaining: number;
   days_to_halt: number;
   candidates: CandidateSlot[];
@@ -59,11 +60,13 @@ export function planRecovery(input: AllocatorInput, model: SuccessModel): Plan {
   for (const c of input.candidates) predictions.set(c, model.predict(c.slot));
 
   const decay = clampUnit(input.reauth_decay_per_attempt ?? 0.8);
+  const lifetime = Math.max(0, input.mandate_lifetime_paise ?? 0);
+  const successValue = input.amount_paise + lifetime;
 
   const reauthValueAt = (attemptsLeft: number): number => {
     if (!input.reauth_available) return 0;
     const spent = Math.max(0, attempts - attemptsLeft);
-    return input.reauth_conversion * decay ** spent * input.amount_paise * input.reauth_value_fraction;
+    return input.reauth_conversion * decay ** spent * successValue * input.reauth_value_fraction;
   };
 
   const V: number[][] = Array.from({ length: attempts + 1 }, () =>
@@ -105,7 +108,7 @@ export function planRecovery(input: AllocatorInput, model: SuccessModel): Plan {
       for (const c of byDay.get(daysAhead) ?? []) {
         const p = predictions.get(c)!.p;
         const remainingAfter = Math.max(0, d - 1);
-        const value = p * input.amount_paise + (1 - p) * V[k - 1]![remainingAfter]!;
+        const value = p * successValue + (1 - p) * V[k - 1]![remainingAfter]!;
         if (value > bestValue) {
           bestValue = value;
           action = 'RETRY';
@@ -173,7 +176,7 @@ export function planRecovery(input: AllocatorInput, model: SuccessModel): Plan {
   const bestImmediate = immediateCandidates.reduce((acc, c) => {
     const p = predictions.get(c)!.p;
     const remaining = Math.max(0, horizon - (earliestDay ?? 0) - 1);
-    const v = p * input.amount_paise + (1 - p) * (attempts > 1 ? V[attempts - 1]![remaining]! : reauthValueAt(0));
+    const v = p * successValue + (1 - p) * (attempts > 1 ? V[attempts - 1]![remaining]! : reauthValueAt(0));
     return Math.max(acc, v);
   }, 0);
 
@@ -208,7 +211,8 @@ function explain(
   if (total - immediate > input.amount_paise * 0.02) {
     return `Waiting is worth ${r(total - immediate)} more than taking the earliest legal slot (${r(total)} against ${r(immediate)}).`;
   }
-  return `Attempting at the chosen slot is worth ${r(total)} against a mandate of ${r(input.amount_paise)}.`;
+  const stake = input.amount_paise + Math.max(0, input.mandate_lifetime_paise ?? 0);
+  return `Attempting at the chosen slot is worth ${r(total)} against ${r(stake)} at stake on this mandate.`;
 }
 
 function clampUnit(n: number): number {

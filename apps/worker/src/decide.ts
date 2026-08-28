@@ -177,6 +177,8 @@ function buildPolicyContext(row: Candidate, now: Date, degraded: boolean): Polic
   };
 }
 
+const DEFAULT_REMAINING_CYCLES = 6;
+
 function horizonDays(row: Candidate, now: Date): number {
   const candidates = [
     row.cycle_end ? (row.cycle_end.getTime() - now.getTime()) / 86_400_000 : null,
@@ -226,6 +228,7 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
         days_to_halt: horizonDays(row, now),
         last_failure_at: row.last_failure_at ?? now,
         reauth_available: row.contacts_this_cycle < 1,
+        remaining_cycles: DEFAULT_REMAINING_CYCLES,
         now,
       },
       model,

@@ -17,6 +17,7 @@ function req(over: Partial<PlanRequest> = {}): PlanRequest {
     days_to_halt: 14,
     last_failure_at: new Date(NOW.getTime() - 6 * 3600 * 1000),
     reauth_available: true,
+    remaining_cycles: 6,
     now: NOW,
     ...over,
   };
@@ -97,10 +98,16 @@ describe('plans map onto proposals the policy engine understands', () => {
 });
 
 describe('the plan is economically coherent', () => {
-  it('never expects more than the mandate is worth', () => {
+  it('never expects more than the mandate plus its remaining lifetime is worth', () => {
+    const plan = buildPlan(req({ remaining_cycles: 6 }), new SuccessModel([]));
+    expect(plan.expected_paise).toBeLessThanOrEqual(149900 * 7);
+  });
+
+  it('values a mandate with more cycles left above one near its end', () => {
     const model = new SuccessModel([]);
-    const plan = buildPlan(req(), model);
-    expect(plan.expected_paise).toBeLessThanOrEqual(149900);
+    const long = buildPlan(req({ remaining_cycles: 10 }), model);
+    const short = buildPlan(req({ remaining_cycles: 0 }), model);
+    expect(long.expected_paise).toBeGreaterThan(short.expected_paise);
   });
 
   it('proposes a slot that is itself legal', () => {
