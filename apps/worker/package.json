@@ -11,7 +11,8 @@
     "backtest": "node src/backtest/generate.ts ../../docs/backtest.md",
     "contention": "node src/contention/generate.ts ../../docs/contention.md",
     "batch": "node src/batch/generate.ts ../../docs/results.md",
-    "ope": "node src/ope/generate.ts ../../docs/off-policy.md"
+    "ope": "node src/ope/generate.ts ../../docs/off-policy.md",
+    "import:csv": "node src/import/cli.ts"
   },
   "dependencies": {
     "@mandate/core": "workspace:*",
