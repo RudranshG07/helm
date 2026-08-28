@@ -1,0 +1,63 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mandate
+          POSTGRES_PASSWORD: mandate
+          POSTGRES_DB: mandate_rescue
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U mandate"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://mandate:mandate@127.0.0.1:5433/mandate_rescue
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Migrate
+        run: node packages/db/migrate.js
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Regenerate reports and fail if they drifted
+        run: |
+          mkdir -p docs
+          pnpm --filter @mandate/worker adversarial
+          pnpm --filter @mandate/worker batch
+          pnpm --filter @mandate/worker contention
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build -t helm:ci .
