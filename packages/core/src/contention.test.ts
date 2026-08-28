@@ -136,8 +136,12 @@ describe('the contention test', () => {
   });
 
   it('never throws on degenerate input', () => {
-    for (const pair of [[[], []], [obs(1, { amount: 0, successRate: 0 }), []]] as const) {
-      expect(() => testContention(pair[0], pair[1])).not.toThrow();
+    const pairs: [AttemptObservation[], AttemptObservation[]][] = [
+      [[], []],
+      [obs(1, { amount: 0, successRate: 0 }), []],
+    ];
+    for (const [a, b] of pairs) {
+      expect(() => testContention(a, b)).not.toThrow();
     }
   });
 
