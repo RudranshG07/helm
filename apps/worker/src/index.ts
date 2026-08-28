@@ -2,6 +2,7 @@ import { close } from '@mandate/db';
 import { config } from './config.ts';
 import { decideBatch, makeProposalClient } from './decide.ts';
 import { rollupDegradation } from './degradation.ts';
+import { isSweepDue, nightlySweep } from './nightly.ts';
 import { dispatchDue } from './dispatch.ts';
 import { reconcileStuck } from './executor.ts';
 import { makeGateway } from './gateway-factory.ts';
@@ -12,6 +13,8 @@ let running = true;
 
 const agent = makeProposalClient();
 const gateway = makeGateway();
+const SWEEP_INTERVAL_MS = Number(process.env['SWEEP_INTERVAL_MS'] ?? 6 * 3600 * 1000);
+let lastSweep: Date | null = null;
 
 async function tick(): Promise<void> {
   const processed = await ingestBatch();
@@ -32,6 +35,15 @@ async function tick(): Promise<void> {
   const reconciled = await reconcileStuck(gateway);
   if (reconciled > 0) {
     log.info('reconcile.batch', { reconciled });
+  }
+
+  const now = new Date();
+  if (isSweepDue(lastSweep, now, SWEEP_INTERVAL_MS)) {
+    lastSweep = now;
+    const sweep = await nightlySweep(now);
+    if (sweep.scored > 0) {
+      log.info('nightly.sweep', sweep as unknown as Record<string, unknown>);
+    }
   }
 }
 

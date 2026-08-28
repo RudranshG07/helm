@@ -10,6 +10,7 @@ const CYCLE = new Date('2026-09-01T00:00:00.000Z');
 async function reset() {
   await query(`DELETE FROM raw_event`);
   await query(`DELETE FROM degradation_signal`);
+  await query(`DELETE FROM mandate_health WHERE subscription_id = $1`, [SUB]);
   await query(`DELETE FROM payment_attempt WHERE subscription_id = $1`, [SUB]);
   await query(`DELETE FROM subscription WHERE id = $1`, [SUB]);
   await query(`DELETE FROM merchant WHERE id = $1`, [MERCHANT]);

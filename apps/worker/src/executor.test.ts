@@ -23,6 +23,7 @@ function request(over: Partial<ExecutionRequest> = {}): ExecutionRequest {
 }
 
 async function seed(opts: { killSwitch?: boolean; writeEnabled?: boolean } = {}) {
+  await query(`DELETE FROM mandate_health WHERE subscription_id = $1`, [SUB]);
   await query(`DELETE FROM execution_intent WHERE subscription_id = $1`, [SUB]);
   await query(`DELETE FROM decision WHERE subscription_id = $1`, [SUB]);
   await query(`DELETE FROM payment_attempt WHERE subscription_id = $1`, [SUB]);

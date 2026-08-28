@@ -9,6 +9,7 @@ const SUB = `${MERCHANT}:sub_bt`;
 const CYCLE = new Date('2026-06-01T00:00:00.000Z');
 
 async function reset() {
+  await query(`DELETE FROM mandate_health WHERE subscription_id = $1`, [SUB]);
   await query(`DELETE FROM payment_attempt WHERE subscription_id = $1`, [SUB]);
   await query(`DELETE FROM subscription WHERE id = $1`, [SUB]);
   await query(`DELETE FROM merchant WHERE id = $1`, [MERCHANT]);
