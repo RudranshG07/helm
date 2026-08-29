@@ -226,9 +226,18 @@ describe('downtime webhooks reach the degradation signal', () => {
 
   it('closes the signal when the gateway reports it resolved', async () => {
     await reset();
+    expect(await isDegraded('HDFC', 'upi_autopay')).toBe(false);
+
     const begin = Math.floor(Date.now() / 1000);
     await ingestDowntime('payment.downtime.started', { method: 'upi', severity: 'high', begin, instrument: { issuer: 'HDFC' } });
+    expect(await isDegraded('HDFC', 'upi_autopay')).toBe(true);
+
     await ingestDowntime('payment.downtime.resolved', { method: 'upi', begin, instrument: { issuer: 'HDFC' } });
+
+    const { rows } = await query<{ source: string; resolved: boolean }>(
+      `SELECT source, resolved_at IS NOT NULL AS resolved FROM degradation_signal ORDER BY id`,
+    );
+    expect(rows.every((r) => r.resolved), `open signals remain: ${JSON.stringify(rows)}`).toBe(true);
     expect(await isDegraded('HDFC', 'upi_autopay')).toBe(false);
   });
 

@@ -99,6 +99,7 @@ function policyContext(m: Mandate, attemptsUsed: number, now: Date): PolicyConte
     write_enabled: true,
     subscription_status: 'pending',
     method: 'upi_autopay',
+    integration: 'recurring_tokens',
     amount_paise: m.amount_paise,
     cycle: m.cycle_start,
     mandate_expiry_at: null,

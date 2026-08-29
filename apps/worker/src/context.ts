@@ -19,6 +19,7 @@ interface ContextRow {
   contacts_this_cycle: number;
   blast_attempts_used: number;
   issuer: string | null;
+  integration: string | null;
 }
 
 const NPCI_ATTEMPT_BUDGET = 4;
@@ -26,7 +27,7 @@ const NPCI_ATTEMPT_BUDGET = 4;
 const CONTEXT_SQL = `
 SELECT
   s.status, s.method, s.amount_paise, s.mandate_expiry_at,
-  m.write_enabled,
+  m.write_enabled, m.integration,
   (SELECT kill_switch FROM control_flags WHERE id = 1) AS kill_switch,
   (SELECT count(*)::int FROM payment_attempt
     WHERE subscription_id = s.id AND cycle = $2 AND counts_against_budget) AS attempts_used,
@@ -82,6 +83,7 @@ export async function loadPolicyContext(
     write_enabled: row.write_enabled,
     subscription_status: row.status,
     method: row.method,
+    integration: (row.integration ?? 'recurring_tokens') as never,
     amount_paise: row.amount_paise,
     cycle,
     mandate_expiry_at: row.mandate_expiry_at,

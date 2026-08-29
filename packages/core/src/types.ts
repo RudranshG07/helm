@@ -1,5 +1,7 @@
 export type Method = 'upi_autopay' | 'card' | 'emandate';
 
+export type Integration = 'subscriptions' | 'recurring_tokens';
+
 export type Bucket =
   | 'SOFT_LIQUIDITY'
   | 'SOFT_TRANSIENT'
@@ -27,6 +29,7 @@ export interface PolicyContext {
 
   subscription_status: string;
   method: Method;
+  integration: Integration;
   amount_paise: number;
   cycle: Date;
   mandate_expiry_at: Date | null;

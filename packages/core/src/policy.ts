@@ -106,8 +106,11 @@ export function evaluate(
   }
 
   if (isWrite) {
-    if (ctx.method === 'card') {
-      return deny('R-METHOD', 'Domestic card subscriptions cannot be charged manually.');
+    if (ctx.method === 'card' && ctx.integration === 'subscriptions') {
+      return deny(
+        'R-METHOD',
+        'Razorpay does not support manually charging a domestic card on a subscription invoice.',
+      );
     }
     if (ctx.amount_paise > AFA_THRESHOLD_PAISE) {
       return deny('R-METHOD', 'Amount exceeds the additional-authentication threshold; no silent retry is possible.');

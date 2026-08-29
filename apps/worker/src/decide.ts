@@ -46,6 +46,7 @@ interface Candidate {
   issuer: string | null;
   success_days: number[];
   contacts_this_cycle: number;
+  integration: string | null;
   last_failure_at: Date | null;
 }
 
@@ -56,7 +57,7 @@ WITH latest AS (
    ORDER BY subscription_id, scored_at DESC, id DESC
 )
 SELECT
-  s.id AS subscription_id, s.merchant_id, s.method, s.amount_paise, s.status,
+  s.id AS subscription_id, s.merchant_id, s.method, s.amount_paise, s.status, m.integration,
   COALESCE(s.current_start, to_timestamp(0)) AS cycle, s.current_end AS cycle_end, s.mandate_expiry_at,
   m.write_enabled,
   h.risk_band, h.risk_score::float8 AS risk_score, h.consecutive_failures,
@@ -158,6 +159,7 @@ function buildPolicyContext(row: Candidate, now: Date, degraded: boolean): Polic
     write_enabled: row.write_enabled,
     subscription_status: row.status,
     method: row.method,
+    integration: (row.integration ?? 'recurring_tokens') as never,
     amount_paise: row.amount_paise,
     cycle: row.cycle,
     mandate_expiry_at: row.mandate_expiry_at,

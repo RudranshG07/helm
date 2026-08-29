@@ -55,8 +55,8 @@ export function successProbability(
 }
 
 export interface SimulatorOptions {
-  seed?: number;
-  model?: GenerativeModel;
+  seed?: number | undefined;
+  model?: GenerativeModel | undefined;
   medianPaise: number;
 }
 

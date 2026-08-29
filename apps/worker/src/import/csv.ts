@@ -20,7 +20,15 @@ export async function loadCsv(
   merchantId: string,
   options: { dryRun?: boolean } = {},
 ): Promise<LoadResult> {
-  const report = importAttempts(parseCsv(readFileSync(path, 'utf8')));
+  return loadCsvText(readFileSync(path, 'utf8'), merchantId, options);
+}
+
+export async function loadCsvText(
+  text: string,
+  merchantId: string,
+  options: { dryRun?: boolean } = {},
+): Promise<LoadResult> {
+  const report = importAttempts(parseCsv(text));
 
   const result: LoadResult = {
     report,

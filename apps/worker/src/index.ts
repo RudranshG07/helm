@@ -3,6 +3,7 @@ import { config } from './config.ts';
 import { decideBatch, makeProposalClient } from './decide.ts';
 import { rollupDegradation } from './degradation.ts';
 import { isSweepDue, nightlySweep } from './nightly.ts';
+import { runOnboardingJobs } from './onboarding.ts';
 import { dispatchDue } from './dispatch.ts';
 import { reconcileStuck } from './executor.ts';
 import { makeGateway } from './gateway-factory.ts';
@@ -17,6 +18,11 @@ const SWEEP_INTERVAL_MS = Number(process.env['SWEEP_INTERVAL_MS'] ?? 6 * 3600 * 
 let lastSweep: Date | null = null;
 
 async function tick(): Promise<void> {
+  const onboarded = await runOnboardingJobs();
+  if (onboarded > 0) {
+    log.info('onboarding.processed', { jobs: onboarded });
+  }
+
   const processed = await ingestBatch();
   await rollupDegradation();
   if (processed > 0) {

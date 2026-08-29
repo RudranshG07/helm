@@ -9,7 +9,11 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: { dashboard: resolve(import.meta.dirname, 'dashboard.html') },
+      input: {
+        dashboard: resolve(import.meta.dirname, 'dashboard.html'),
+        onboard: resolve(import.meta.dirname, 'onboard.html'),
+        authorize: resolve(import.meta.dirname, 'authorize.html'),
+      },
     },
   },
   server: {

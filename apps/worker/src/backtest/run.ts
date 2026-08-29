@@ -115,6 +115,7 @@ export async function runBacktest(merchantId?: string): Promise<BacktestResult> 
       write_enabled: true,
       subscription_status: 'pending',
       method: failure.method,
+      integration: 'recurring_tokens',
       amount_paise: failure.amount_paise,
       cycle: failure.cycle,
       mandate_expiry_at: failure.mandate_expiry_at,

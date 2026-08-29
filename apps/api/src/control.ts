@@ -12,6 +12,7 @@ const REPORTS: Record<string, string> = {
   backtest: 'backtest.md',
   'off-policy': 'off-policy.md',
   adversarial: 'adversarial.md',
+  deconfliction: 'deconfliction.md',
   taxonomy: 'taxonomy.md',
 };
 

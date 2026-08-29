@@ -7,6 +7,8 @@ import { config } from './config.ts';
 import { close, query } from '@mandate/db';
 import { registerChargeQueueRoutes } from './charge-queue.ts';
 import { registerControlRoutes } from './control.ts';
+import { registerAuthorizeRoutes } from './authorize.ts';
+import { registerOnboardRoutes } from './onboard.ts';
 import { registerDashboardRoutes } from './dashboard.ts';
 import { registerWebhookRoutes } from './webhook.ts';
 
@@ -23,7 +25,7 @@ const app = Fastify({
       censor: '[redacted]',
     },
   },
-  bodyLimit: 1_048_576,
+  bodyLimit: 16_777_216,
 });
 
 app.addContentTypeParser(
@@ -53,16 +55,22 @@ registerWebhookRoutes(app);
 registerDashboardRoutes(app);
 registerChargeQueueRoutes(app);
 registerControlRoutes(app);
+registerOnboardRoutes(app);
+registerAuthorizeRoutes(app);
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
 if (existsSync(webRoot)) {
   await app.register(fastifyStatic, { root: webRoot });
   app.get('/dashboard', async (_request, reply) => reply.sendFile('dashboard.html'));
+  app.get('/onboard', async (_request, reply) => reply.sendFile('onboard.html'));
+  app.get('/authorize', async (_request, reply) => reply.sendFile('authorize.html'));
   app.setNotFoundHandler((request, reply) => {
     if (request.url.startsWith('/api') || request.url.startsWith('/webhooks')) {
       return reply.code(404).send({ error: 'not found' });
     }
     if (request.url.startsWith('/dashboard')) return reply.sendFile('dashboard.html');
+    if (request.url.startsWith('/onboard')) return reply.sendFile('onboard.html');
+    if (request.url.startsWith('/authorize')) return reply.sendFile('authorize.html');
     return reply.sendFile('index.html');
   });
 }

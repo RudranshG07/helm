@@ -3,6 +3,7 @@ import type { Proposal } from '@mandate/core';
 import { query } from '@mandate/db';
 import { config } from './config.ts';
 import { loadPolicyContext } from './context.ts';
+import { shiftIfNeeded } from './holidays.ts';
 import { execute } from './executor.ts';
 import type { Gateway } from './gateway.ts';
 import { log } from './log.ts';
@@ -14,6 +15,7 @@ interface DueDecision {
   cycle: Date;
   amount_paise: number;
   scheduled_for: Date;
+  method: string;
   rationale: string | null;
   confidence: number | null;
   attempts_used: number;
@@ -22,7 +24,7 @@ interface DueDecision {
 const DUE_SQL = `
 SELECT
   d.id AS decision_id, d.subscription_id, s.rzp_subscription_id, d.cycle,
-  s.amount_paise, d.scheduled_for, d.rationale, d.confidence::float8 AS confidence,
+  s.amount_paise, s.method, d.scheduled_for, d.rationale, d.confidence::float8 AS confidence,
   (SELECT count(*)::int FROM payment_attempt
     WHERE subscription_id = d.subscription_id AND cycle = d.cycle) AS attempts_used
 FROM decision d
@@ -94,6 +96,16 @@ export async function dispatchDue(gateway: Gateway, now = new Date()): Promise<n
         continue;
       }
 
+      const shift = await shiftIfNeeded(row.scheduled_for, row.method);
+      if (shift.shifted) {
+        await query(
+          `UPDATE decision SET scheduled_for = $2,
+                  explanation = explanation || ' Shifted for a bank holiday: ' || $3
+            WHERE id = $1`,
+          [row.decision_id, shift.at, shift.reason ?? 'bank holiday'],
+        );
+      }
+
       const result = await execute(
         {
           decision_id: row.decision_id,
@@ -102,7 +114,7 @@ export async function dispatchDue(gateway: Gateway, now = new Date()): Promise<n
           cycle: row.cycle,
           attempt_number: attemptNumber,
           amount_paise: row.amount_paise,
-          scheduled_for: row.scheduled_for,
+          scheduled_for: shift.at,
         },
         { gateway },
       );

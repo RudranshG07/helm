@@ -14,5 +14,7 @@ export * from './allocator.ts';
 export * from './ope.ts';
 export * from './csv.ts';
 export * from './csv-import.ts';
+export * from './deconfliction.ts';
+export * from './secrets.ts';
 export * from './agent.ts';
 export * from './agent-clients.ts';

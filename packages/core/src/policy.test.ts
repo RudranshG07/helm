@@ -15,6 +15,7 @@ function ctx(over: Partial<PolicyContext> = {}): PolicyContext {
     write_enabled: true,
     subscription_status: 'pending',
     method: 'upi_autopay',
+    integration: 'subscriptions',
     amount_paise: 49900,
     cycle: fromIst(2026, 8, 1, 0),
     mandate_expiry_at: fromIst(2027, 0, 1, 0),
@@ -135,8 +136,12 @@ describe('R-HARD', () => {
 });
 
 describe('R-METHOD', () => {
-  it('denies a retry on a domestic card, which cannot be manually charged', () => {
-    expect(ev(retry(), ctx({ method: 'card' })).rule_id).toBe('R-METHOD');
+  it('denies a card retry on the subscriptions integration, where no charge API exists', () => {
+    expect(ev(retry(), ctx({ method: 'card', integration: 'subscriptions' })).rule_id).toBe('R-METHOD');
+  });
+
+  it('allows a card retry on the token integration, where recurring cards are chargeable', () => {
+    expect(ev(retry(), ctx({ method: 'card', integration: 'recurring_tokens' })).verdict).toBe('ALLOW');
   });
   it('allows emandate', () => {
     expect(ev(retry(), ctx({ method: 'emandate' })).verdict).toBe('ALLOW');
