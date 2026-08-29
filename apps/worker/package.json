@@ -15,7 +15,8 @@
     "import:csv": "node src/import/cli.ts",
     "backfill": "node src/backfill/cli.ts",
     "deconflict": "node src/deconflict/generate.ts ../../docs/deconfliction.md",
-    "setup:razorpay": "node src/setup/cli.ts"
+    "setup:razorpay": "node src/setup/cli.ts",
+    "reclassify": "node src/taxonomy/cli.ts"
   },
   "dependencies": {
     "@mandate/core": "workspace:*",

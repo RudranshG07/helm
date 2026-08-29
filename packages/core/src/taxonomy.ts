@@ -1,6 +1,6 @@
 import type { Bucket, Method } from './types.ts';
 
-export const TAXONOMY_VERSION = '0.1.0-seed';
+export const TAXONOMY_VERSION = '0.2.0-observed';
 
 export type Confidence = 'high' | 'medium' | 'low';
 
@@ -33,7 +33,10 @@ const REASON_MAP: Record<string, Entry> = {
   partner_bank_downtime: { bucket: 'SOFT_TRANSIENT',  confidence: 'high',   verified: false },
   invalid_vpa:           { bucket: 'HARD_INSTRUMENT', confidence: 'medium', verified: false },
   payment_cancelled:     { bucket: 'HARD_CUSTOMER',   confidence: 'medium', verified: false },
+  server_error:          { bucket: 'SOFT_TRANSIENT',  confidence: 'medium', verified: false },
 };
+
+const NON_CUSTOMER_SOURCES = new Set(['business', 'internal']);
 
 const SOURCE_LEAN: Record<string, Bucket> = {
   issuer_bank: 'SOFT_TRANSIENT',
@@ -47,6 +50,11 @@ const SOURCE_LEAN: Record<string, Bucket> = {
 
 export function isOurBug(err: AttemptError): boolean {
   return err.error_source === 'business';
+}
+
+export function countsAgainstBudget(err: AttemptError): boolean {
+  const source = err.error_source?.trim().toLowerCase();
+  return !(source !== undefined && NON_CUSTOMER_SOURCES.has(source));
 }
 
 export function classify(err: AttemptError, method: Method): Classification {

@@ -48,7 +48,7 @@ describe('the rollup only fires on evidence', () => {
     await attempts(200, 180, 'HDFC', 48);
     await attempts(3, 0, 'HDFC', 0.5);
 
-    expect(await rollupDegradation()).toBe(0);
+    expect(await rollupDegradation(MERCHANT)).toBe(0);
     expect(await isDegraded('HDFC', 'upi_autopay')).toBe(false);
   });
 
@@ -57,7 +57,7 @@ describe('the rollup only fires on evidence', () => {
     await attempts(200, 180, 'HDFC', 48);
     await attempts(50, 45, 'HDFC', 0.5);
 
-    expect(await rollupDegradation()).toBe(0);
+    expect(await rollupDegradation(MERCHANT)).toBe(0);
     expect(await isDegraded('HDFC', 'upi_autopay')).toBe(false);
   });
 
@@ -66,7 +66,7 @@ describe('the rollup only fires on evidence', () => {
     await attempts(200, 180, 'HDFC', 48);
     await attempts(50, 5, 'HDFC', 0.5);
 
-    expect(await rollupDegradation()).toBe(1);
+    expect(await rollupDegradation(MERCHANT)).toBe(1);
     expect(await isDegraded('HDFC', 'upi_autopay')).toBe(true);
   });
 
@@ -75,8 +75,8 @@ describe('the rollup only fires on evidence', () => {
     await attempts(200, 180, 'HDFC', 48);
     await attempts(50, 5, 'HDFC', 0.5);
 
-    await rollupDegradation();
-    expect(await rollupDegradation()).toBe(0);
+    await rollupDegradation(MERCHANT);
+    expect(await rollupDegradation(MERCHANT)).toBe(0);
 
     const { rows } = await query(`SELECT id FROM degradation_signal WHERE source = 'internal_rollup'`);
     expect(rows).toHaveLength(1);
@@ -86,12 +86,12 @@ describe('the rollup only fires on evidence', () => {
     await reset();
     await attempts(200, 180, 'HDFC', 48);
     await attempts(50, 5, 'HDFC', 0.5);
-    await rollupDegradation();
+    await rollupDegradation(MERCHANT);
     expect(await isDegraded('HDFC', 'upi_autopay')).toBe(true);
 
     await query(`UPDATE payment_attempt SET status = 'captured'
                   WHERE subscription_id = $1 AND attempted_at > now() - interval '2 hours'`, [SUB]);
-    await rollupDegradation();
+    await rollupDegradation(MERCHANT);
 
     expect(await isDegraded('HDFC', 'upi_autopay')).toBe(false);
   });
@@ -103,7 +103,7 @@ describe('the rollup only fires on evidence', () => {
     await attempts(200, 180, 'ICICI', 48);
     await attempts(50, 46, 'ICICI', 0.5);
 
-    await rollupDegradation();
+    await rollupDegradation(MERCHANT);
 
     expect(await isDegraded('HDFC', 'upi_autopay')).toBe(true);
     expect(await isDegraded('ICICI', 'upi_autopay')).toBe(false);
@@ -117,7 +117,7 @@ describe('pooling is opt-in per merchant', () => {
     await attempts(200, 180, 'HDFC', 48);
     await attempts(50, 5, 'HDFC', 0.5);
 
-    expect(await rollupDegradation()).toBe(0);
+    expect(await rollupDegradation(MERCHANT)).toBe(0);
     expect(await isDegraded('HDFC', 'upi_autopay')).toBe(false);
   });
 
@@ -125,7 +125,7 @@ describe('pooling is opt-in per merchant', () => {
     await reset();
     await attempts(200, 180, 'HDFC', 48);
     await attempts(50, 5, 'HDFC', 0.5);
-    expect(await rollupDegradation()).toBe(1);
+    expect(await rollupDegradation(MERCHANT)).toBe(1);
   });
 });
 
@@ -160,7 +160,7 @@ describe('the two signals are stored side by side', () => {
     await reset();
     await attempts(200, 180, 'HDFC', 48);
     await attempts(50, 5, 'HDFC', 0.5);
-    await rollupDegradation();
+    await rollupDegradation(MERCHANT);
 
     await recordRazorpayDowntime({
       issuer: 'HDFC', method: 'upi_autopay', severity: 'high',
@@ -180,7 +180,7 @@ describe('the two signals are stored side by side', () => {
     });
     await attempts(200, 180, 'HDFC', 48);
     await attempts(50, 5, 'HDFC', 0.5);
-    await rollupDegradation();
+    await rollupDegradation(MERCHANT);
 
     const lead = await leadTimes();
     expect(lead).toHaveLength(1);

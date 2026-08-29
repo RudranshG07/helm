@@ -28,11 +28,12 @@ JOIN subscription s ON s.id = pa.subscription_id
 JOIN merchant m ON m.id = s.merchant_id
 WHERE pa.attempted_at > now() - interval '14 days'
   AND m.cross_merchant_signals
+  AND ($1::text IS NULL OR s.merchant_id = $1)
 GROUP BY pa.issuer, s.method
 `;
 
-export async function rollupDegradation(): Promise<number> {
-  const { rows } = await query<RollupRow>(ROLLUP_SQL);
+export async function rollupDegradation(merchantId?: string): Promise<number> {
+  const { rows } = await query<RollupRow>(ROLLUP_SQL, [merchantId ?? null]);
   let opened = 0;
 
   for (const row of rows) {

@@ -1,4 +1,4 @@
-import { classify, isOurBug, normalize, score } from '@mandate/core';
+import { classify, countsAgainstBudget, isOurBug, normalize, score } from '@mandate/core';
 import type { NormalizedAttempt, NormalizedSubscription, RazorpayEvent } from '@mandate/core';
 import { withTransaction } from '@mandate/db';
 import type { PoolClient } from 'pg';
@@ -90,7 +90,7 @@ async function insertAttempt(
       subscriptionId, attempt.rzp_payment_id, attempt.rzp_order_id, cycle, attempt.attempted_at,
       attempt.status, attempt.amount_paise, attempt.error_code, attempt.error_description,
       attempt.error_source, attempt.error_step, attempt.error_reason, attempt.issuer, attempt.bank,
-      classification.bucket, classification.taxonomy_version, !isOurBug(attempt),
+      classification.bucket, classification.taxonomy_version, countsAgainstBudget(attempt),
     ],
   );
 }

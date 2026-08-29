@@ -44,7 +44,7 @@ export default function Authorize() {
   const [state, setState] = useState<State>('idle');
   const [message, setMessage] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
-  const [payMethod, setPayMethod] = useState<PayMethod>('emandate');
+  const [payMethod, setPayMethod] = useState<PayMethod>('card');
   const checkoutReady = useCheckoutScript();
 
   const refresh = useCallback(async () => {
@@ -84,12 +84,7 @@ export default function Authorize() {
         recurring: '1',
         name: 'Helm',
         description: `${label} — ₹${amountPaise / 100} monthly mandate`,
-        prefill: payMethod === 'card'
-          ? { method: 'card', email: 'mandate@example.com', contact: '9999999999' }
-          : { method: 'emandate', bank: 'HDFC', email: 'mandate@example.com', contact: '9999999999' },
-        method: payMethod === 'card'
-          ? { card: true, netbanking: false, wallet: false, upi: false, emi: false, paylater: false }
-          : { emandate: true, card: false, netbanking: false, wallet: false, upi: false, emi: false, paylater: false },
+        prefill: { email: 'mandate@example.com', contact: '9999999999' },
         theme: { color: '#1d5f7e' },
         handler: async (response: { razorpay_payment_id: string }) => {
           setState('saving');
@@ -167,13 +162,30 @@ export default function Authorize() {
       </div>
 
       <p className="onboard-lede" style={{ marginTop: -8 }}>
-        {payMethod === 'emandate'
-          ? 'Pick any bank, then choose Success on the simulated bank page.'
-          : 'Test card 5104 0155 5555 5558, any future expiry, any CVV. If a card is refused as not eligible for recurring, switch to e-mandate.'}
+        {payMethod === 'card'
+          ? 'Use the recurring-eligible test card below. A generic test card will be refused as not eligible.'
+          : 'Pick any bank, then choose Success on the simulated bank page.'}
       </p>
 
       {!config.ready && (
         <div className="form-error" role="alert">{config.problem}</div>
+      )}
+
+      {payMethod === 'card' && (
+        <div className="testcard paper">
+          <div className="testcard-label">Recurring-eligible test card</div>
+          <div className="testcard-grid">
+            <div><span>Number</span><code>4718 6091 0820 4366</code></div>
+            <div><span>Expiry</span><code>12 / 30</code></div>
+            <div><span>CVV</span><code>123</code></div>
+            <div><span>Name</span><code>Test User</code></div>
+          </div>
+          <p className="testcard-note">
+            Domestic Visa credit, the card Razorpay documents for subscriptions and tokenisation.
+            Generic test cards such as 4111 1111 1111 1111 are refused as not eligible for recurring.
+            On the OTP screen choose Success.
+          </p>
+        </div>
       )}
 
       <div className="mandate-grid">

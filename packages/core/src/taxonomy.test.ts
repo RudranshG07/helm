@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TAXONOMY_VERSION, classify, isHard, isOurBug } from './taxonomy.ts';
+import { TAXONOMY_VERSION, classify, countsAgainstBudget, isHard, isOurBug } from './taxonomy.ts';
 
 describe('classify', () => {
   it.each([
@@ -69,4 +69,63 @@ describe('isOurBug', () => {
 describe('isHard', () => {
   it.each([['HARD_INSTRUMENT', true], ['HARD_CUSTOMER', true], ['SOFT_LIQUIDITY', false], ['UNKNOWN', false]] as const)
     ('%s -> %s', (b, expected) => expect(isHard(b)).toBe(expected));
+});
+
+describe('countsAgainstBudget', () => {
+  it('does not spend a customer attempt on a merchant-side malformed request', () => {
+    expect(countsAgainstBudget({ error_source: 'business' })).toBe(false);
+  });
+
+  it('does not spend a customer attempt on a gateway internal failure', () => {
+    expect(countsAgainstBudget({
+      error_reason: 'server_error',
+      error_source: 'internal',
+      error_step: 'card_mandate_process',
+    })).toBe(false);
+  });
+
+  it('spends an attempt on a genuine customer-side decline', () => {
+    expect(countsAgainstBudget({ error_reason: 'insufficient_funds', error_source: 'customer' })).toBe(true);
+  });
+
+  it('spends an attempt when the source is a real bank failure, not a Razorpay one', () => {
+    expect(countsAgainstBudget({ error_source: 'issuer_bank' })).toBe(true);
+  });
+
+  it('is case and whitespace insensitive on the source', () => {
+    expect(countsAgainstBudget({ error_source: '  Internal ' })).toBe(false);
+  });
+
+  it('spends an attempt when the source is missing, the conservative default', () => {
+    expect(countsAgainstBudget({})).toBe(true);
+  });
+
+  it('separates a gateway failure from our own bug', () => {
+    const gateway = { error_source: 'internal' };
+    expect(countsAgainstBudget(gateway)).toBe(false);
+    expect(isOurBug(gateway)).toBe(false);
+  });
+});
+
+describe('server_error observed on the live Razorpay account', () => {
+  const observed = {
+    error_code: 'SERVER_ERROR',
+    error_reason: 'server_error',
+    error_source: 'internal',
+    error_step: 'card_mandate_process',
+  };
+
+  it('is no longer unclassified', () => {
+    const c = classify(observed, 'card');
+    expect(c.bucket).toBe('SOFT_TRANSIENT');
+    expect(c.matched_rule).toBe('reason:server_error');
+  });
+
+  it('stays unverified until a retry outcome proves the bucket', () => {
+    expect(classify(observed, 'card').verified).toBe(false);
+  });
+
+  it('is retryable, so it must not be treated as hard', () => {
+    expect(isHard(classify(observed, 'card').bucket)).toBe(false);
+  });
 });
