@@ -4,7 +4,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react()],
-  publicDir: false,
+  publicDir: resolve(import.meta.dirname, 'landing'),
   build: {
     outDir: 'dist',
     emptyOutDir: true,

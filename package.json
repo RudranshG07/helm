@@ -15,7 +15,9 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r exec tsc --noEmit",
     "start": "bash scripts/start.sh",
-    "stop": "docker compose down"
+    "stop": "docker compose down",
+    "build": "pnpm --filter @mandate/web build",
+    "dev": "bash scripts/start.sh"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

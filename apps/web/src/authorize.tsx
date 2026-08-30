@@ -209,7 +209,13 @@ export default function Authorize() {
 
   return (
     <div className="shell onboard">
-      <header className="masthead"><a className="wordmark" href="/">Helm</a></header>
+      <header className="masthead">
+        <a className="wordmark" href="/">Helm</a>
+        <nav className="site-links" aria-label="Product">
+          <a className="site-link" href="/onboard">Connect</a>
+          <a className="site-link" href="/dashboard">Dashboard</a>
+        </nav>
+      </header>
 
       <h1 className="onboard-title">Authorise mandates</h1>
       <p className="onboard-lede">

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { rupees } from './format.ts';
 
 type Method = 'connect' | 'upload';
 
@@ -56,17 +57,7 @@ function Progress({ merchantId }: { merchantId: string }) {
   }
 
   if (status.onboarding_state === 'ready') {
-    return (
-      <div className="onboard-progress is-done">
-        <strong>Ready</strong>
-        <p>
-          {status.subscriptions} mandates and {status.attempts} payment attempts loaded,
-          {' '}{status.failures} of them failures. Nothing has been charged and nothing will be
-          until you grant write access.
-        </p>
-        <a className="cta" href="/dashboard">Open the dashboard</a>
-      </div>
-    );
+    return <RecoveryReport merchantId={merchantId} status={status} />;
   }
 
   return (
@@ -85,7 +76,9 @@ export default function Onboard() {
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [merchantId, setMerchantId] = useState<string | null>(null);
+  const [merchantId, setMerchantId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get('merchant'),
+  );
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -121,7 +114,13 @@ export default function Onboard() {
   if (merchantId) {
     return (
       <div className="shell onboard">
-        <header className="masthead"><a className="wordmark" href="/">Helm</a></header>
+        <header className="masthead">
+        <a className="wordmark" href="/">Helm</a>
+        <nav className="site-links" aria-label="Product">
+          <a className="site-link" href="/authorize">Mandates</a>
+          <a className="site-link" href="/dashboard">Dashboard</a>
+        </nav>
+      </header>
         <Progress merchantId={merchantId} />
       </div>
     );
@@ -129,7 +128,13 @@ export default function Onboard() {
 
   return (
     <div className="shell onboard">
-      <header className="masthead"><a className="wordmark" href="/">Helm</a></header>
+      <header className="masthead">
+        <a className="wordmark" href="/">Helm</a>
+        <nav className="site-links" aria-label="Product">
+          <a className="site-link" href="/authorize">Mandates</a>
+          <a className="site-link" href="/dashboard">Dashboard</a>
+        </nav>
+      </header>
 
       <h1 className="onboard-title">Find the revenue that is slipping away</h1>
       <p className="onboard-lede">
@@ -229,5 +234,180 @@ export default function Onboard() {
         </p>
       </form>
     </div>
+  );
+}
+
+interface Report {
+  has_history: boolean;
+  window_days: number;
+  headline: string;
+  caveat: string | null;
+  money: {
+    at_risk_paise: number;
+    recovered_paise: number;
+    lost_paise: number;
+    addressable_paise: number;
+    unclassified_paise: number;
+    hard_paise: number;
+    recovery_rate: number;
+  };
+  attempts: {
+    spent_by_default: number;
+    wasted_on_hard_declines: number;
+    in_peak_windows: number;
+    we_would_reschedule: number;
+    we_would_not_spend: number;
+  };
+  urgent: {
+    subscription_id: string;
+    customer_ref: string;
+    amount_paise: number;
+    bucket: string;
+    attempts_used: number;
+    days_to_halt: number;
+  }[];
+}
+
+function RecoveryReport({ merchantId, status }: { merchantId: string; status: Status }) {
+  const [report, setReport] = useState<Report | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let stop = false;
+    fetch(`/api/onboard/${merchantId}/report`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error('report unavailable');
+        return r.json() as Promise<Report>;
+      })
+      .then((r) => { if (!stop) setReport(r); })
+      .catch(() => { if (!stop) setFailed(true); });
+    return () => { stop = true; };
+  }, [merchantId]);
+
+  if (failed) {
+    return (
+      <div className="onboard-progress is-done">
+        <strong>Connected</strong>
+        <p>
+          {status.subscriptions} mandates and {status.attempts} attempts loaded. Nothing has been
+          charged and nothing will be until you grant write access.
+        </p>
+        <a className="cta" href="/dashboard">Open the dashboard</a>
+      </div>
+    );
+  }
+
+  if (!report) {
+    return (
+      <div className="onboard-progress">
+        <span className="spinner" aria-hidden="true" />
+        Working out what these failures cost you.
+      </div>
+    );
+  }
+
+  if (!report.has_history) {
+    return (
+      <div className="onboard-progress is-done">
+        <strong>Connected, nothing failing</strong>
+        <p>
+          No failed mandates in the last {report.window_days} days. Helm will keep watching and
+          tell you the moment one starts to slip.
+        </p>
+        <a className="cta" href="/dashboard">Open the dashboard</a>
+      </div>
+    );
+  }
+
+  const m = report.money;
+
+  return (
+    <section className="report-card">
+      <span className="eyebrow">Last {report.window_days} days, from your own Razorpay history</span>
+      <h2 className="report-headline">{report.headline}</h2>
+
+      <div className="tiles">
+        <div className="tile paper">
+          <span className="eyebrow">Failed</span>
+          <strong className="num">{rupees(m.at_risk_paise)}</strong>
+          <span className="hint">{Math.round(m.recovery_rate * 100)}% of it eventually recovered</span>
+        </div>
+        <div className="tile paper">
+          <span className="eyebrow">Never recovered</span>
+          <strong className="num">{rupees(m.lost_paise)}</strong>
+          <span className="hint">gone, after the default retries ran out</span>
+        </div>
+        <div className="tile paper">
+          <span className="eyebrow">Responds to timing</span>
+          <strong className="num">{rupees(m.addressable_paise)}</strong>
+          <span className="hint">soft declines Helm would retry differently</span>
+        </div>
+      </div>
+
+      <div className="report-split">
+        <div className="report-block paper">
+          <h3>Where the lost money went</h3>
+          <dl className="report-rows">
+            <div><dt>Soft declines, worth another attempt</dt><dd>{rupees(m.addressable_paise)}</dd></div>
+            <div><dt>Hard declines, no retry can fix</dt><dd>{rupees(m.hard_paise)}</dd></div>
+            <div><dt>Decline codes Helm has not mapped</dt><dd>{rupees(m.unclassified_paise)}</dd></div>
+          </dl>
+        </div>
+        <div className="report-block paper">
+          <h3>What the default schedule did</h3>
+          <dl className="report-rows">
+            <div><dt>Attempts spent</dt><dd>{report.attempts.spent_by_default}</dd></div>
+            <div><dt>Spent on declines that could never succeed</dt><dd>{report.attempts.wasted_on_hard_declines}</dd></div>
+            <div><dt>Fired into a contested bank window</dt><dd>{report.attempts.in_peak_windows}</dd></div>
+            <div><dt>Helm would have re-timed</dt><dd>{report.attempts.we_would_reschedule}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      {report.urgent.length > 0 && (
+        <div className="report-urgent">
+          <div className="section-head">
+            <h3>Dying now</h3>
+            <span className="count">{report.urgent.length}</span>
+          </div>
+          <div className="paper table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Customer</th>
+                  <th scope="col" className="num">Amount</th>
+                  <th scope="col">Why it failed</th>
+                  <th scope="col" className="num">Attempts used</th>
+                  <th scope="col" className="num">Days left</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.urgent.map((u) => (
+                  <tr key={u.subscription_id}>
+                    <td>{u.customer_ref}</td>
+                    <td className="num amount">{rupees(u.amount_paise)}</td>
+                    <td><span className={`badge ${u.bucket}`}>{u.bucket.replace(/_/g, ' ').toLowerCase()}</span></td>
+                    <td className="num">{u.attempts_used}</td>
+                    <td className="num">{u.days_to_halt}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {report.caveat && (
+        <p className="report-caveat" role="note">{report.caveat}</p>
+      )}
+
+      <div className="report-actions">
+        <a className="cta" href="/dashboard">Open the dashboard</a>
+        <p className="field-note">
+          Helm has read-only access. Nothing has been charged and nothing will be until you
+          grant write access.
+        </p>
+      </div>
+    </section>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.ts';
-import type { Control, Detail, Merchant, QueueRow } from './api.ts';
+import type { Control, Detail, Merchant, OutreachRow, QueueRow } from './api.ts';
 import { Markdown } from './markdown.tsx';
 import { bucketLabel, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
 
@@ -353,5 +353,89 @@ export function KillSwitch({ control, onChange }: { control: Control; onChange: 
         ? <button type="button" className="retry" onClick={() => void release()} disabled={busy}>Release</button>
         : <button type="button" className="danger" onClick={() => void engage()} disabled={busy}>Halt everything</button>}
     </div>
+  );
+}
+
+const OUTREACH_BADGE: Record<string, string> = {
+  sent: 'healthy',
+  viewed: 'SOFT_LIQUIDITY',
+  converted: 'healthy',
+  queued: 'at_risk',
+  failed: 'critical',
+  expired: 'UNKNOWN',
+  revoked: 'UNKNOWN',
+};
+
+const FUNNEL_ORDER = ['queued', 'sent', 'viewed', 'converted', 'expired', 'revoked', 'failed'];
+
+export function Outreach() {
+  const [data, setData] = useState<{ outreach: OutreachRow[]; funnel: Record<string, number> } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.outreach().then(setData).catch((e: Error) => setError(e.message));
+  }, []);
+
+  if (error) return <div className="state is-error"><strong>Could not load outreach</strong>{error}</div>;
+  if (!data) return <div className="skeleton tall" />;
+  if (data.outreach.length === 0) {
+    return (
+      <div className="state">
+        <strong>Nobody has been contacted</strong>
+        Outreach happens when a mandate fails for a reason no retry can fix.
+      </div>
+    );
+  }
+
+  const funnel = FUNNEL_ORDER.filter((k) => data.funnel[k]);
+
+  return (
+    <>
+      <p className="hint">
+        When a decline cannot be fixed by retrying, Helm asks the customer to re-authorise.
+        Every message is capped, quiet-hours aware, and revocable by the customer.
+      </p>
+
+      <div className="tiles">
+        {funnel.map((k) => (
+          <div className="tile paper" key={k}>
+            <span className="eyebrow">{k}</span>
+            <strong className="num">{data.funnel[k]}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="paper table-wrap" style={{ marginTop: 20 }}>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Customer</th>
+              <th scope="col" className="num">Amount</th>
+              <th scope="col">Channel</th>
+              <th scope="col">Sent to</th>
+              <th scope="col">Status</th>
+              <th scope="col">Created</th>
+              <th scope="col">Expires</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.outreach.map((o) => (
+              <tr key={o.id}>
+                <td><a className="ref link" href={`#/mandate/${encodeURIComponent(o.subscription_id)}`}>{o.customer_ref}</a></td>
+                <td className="num amount">{rupees(o.amount_paise)}</td>
+                <td>{o.channel === 'none' ? <span className="ref">no contact</span> : o.channel}</td>
+                <td><span className="ref">{o.recipient_masked ?? '—'}</span></td>
+                <td>
+                  <span className={`badge ${OUTREACH_BADGE[o.status] ?? 'UNKNOWN'}`}>{o.status}</span>
+                  {o.error && <> <span className="ref">{o.error}</span></>}
+                </td>
+                <td>{ist(o.created_at)}</td>
+                <td>{ist(o.expires_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

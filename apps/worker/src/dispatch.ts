@@ -5,6 +5,8 @@ import { config } from './config.ts';
 import { loadPolicyContext } from './context.ts';
 import { shiftIfNeeded } from './holidays.ts';
 import { execute } from './executor.ts';
+import { sendOutreach } from './outreach/send.ts';
+import type { OutreachProvider } from './outreach/provider.ts';
 import type { Gateway } from './gateway.ts';
 import { log } from './log.ts';
 
@@ -60,6 +62,72 @@ async function recordRevocation(
     `UPDATE decision SET outcome = 'revoked' WHERE id = $1`,
     [row.decision_id],
   );
+}
+
+const DUE_OUTREACH_SQL = `
+SELECT d.id AS decision_id, d.subscription_id, d.cycle
+  FROM decision d
+  JOIN subscription s ON s.id = d.subscription_id
+ WHERE d.verdict = 'ALLOW'
+   AND d.proposed_action = 'REAUTH_OUTREACH'
+   AND d.outcome IS NULL
+   AND NOT EXISTS (SELECT 1 FROM outreach o WHERE o.decision_id = d.id)
+ ORDER BY d.created_at
+ LIMIT $1
+`;
+
+interface DueOutreach {
+  decision_id: number;
+  subscription_id: string;
+  cycle: Date;
+}
+
+export async function dispatchOutreach(
+  provider: OutreachProvider,
+  now = new Date(),
+): Promise<number> {
+  const { rows } = await query<DueOutreach>(DUE_OUTREACH_SQL, [config.decideBatchSize]);
+
+  for (const row of rows) {
+    try {
+      const result = await sendOutreach(
+        { decision_id: row.decision_id, subscription_id: row.subscription_id, cycle: row.cycle, now },
+        provider,
+      );
+
+      if (result.status === 'deferred') {
+        log.info('outreach.deferred_quiet_hours', {
+          decision_id: row.decision_id, until: result.until.toISOString(),
+        });
+        continue;
+      }
+
+      if (result.status === 'blocked') {
+        await query(
+          `UPDATE decision SET outcome = 'revoked', executed_at = clock_timestamp() WHERE id = $1`,
+          [row.decision_id],
+        );
+        log.warn('outreach.blocked', { decision_id: row.decision_id, reason: result.reason });
+        continue;
+      }
+
+      if (result.status === 'sent' || result.status === 'queued') {
+        await query(
+          `UPDATE decision SET executed_at = clock_timestamp(), outcome = $2 WHERE id = $1`,
+          [row.decision_id, result.status === 'sent' ? 'contacted' : 'contact_queued'],
+        );
+      }
+
+      log.info('outreach.dispatched', { decision_id: row.decision_id, status: result.status });
+    } catch (err) {
+      log.error('outreach.dispatch_failed', {
+        decision_id: row.decision_id,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return rows.length;
 }
 
 export async function dispatchDue(gateway: Gateway, now = new Date()): Promise<number> {

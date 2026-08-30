@@ -9,6 +9,7 @@ import { registerChargeQueueRoutes } from './charge-queue.ts';
 import { registerControlRoutes } from './control.ts';
 import { registerAuthorizeRoutes } from './authorize.ts';
 import { registerOnboardRoutes } from './onboard.ts';
+import { registerReauthRoutes } from './reauth.ts';
 import { registerDashboardRoutes } from './dashboard.ts';
 import { registerWebhookRoutes } from './webhook.ts';
 
@@ -57,6 +58,7 @@ registerChargeQueueRoutes(app);
 registerControlRoutes(app);
 registerOnboardRoutes(app);
 registerAuthorizeRoutes(app);
+registerReauthRoutes(app);
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
 if (existsSync(webRoot)) {

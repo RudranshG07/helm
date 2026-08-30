@@ -1,3 +1,4 @@
+import { buildRecoveryReport } from '@mandate/worker/report/recovery';
 import type { FastifyInstance } from 'fastify';
 import {
   decryptSecret, deriveMasterKey, encryptSecret, fingerprint, inspectKeyId,
@@ -180,6 +181,24 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
 
     return { ...rows[0], job: job[0] ?? null };
   });
+
+  app.get<{ Params: { id: string }; Querystring: { days?: string } }>(
+    '/api/onboard/:id/report',
+    async (request, reply) => {
+      const { rows } = await query<{ id: string }>(
+        `SELECT id FROM merchant WHERE id = $1`, [request.params.id],
+      );
+      if (!rows[0]) return reply.code(404).send({ error: 'unknown merchant' });
+
+      const days = Math.min(Math.max(Number(request.query.days ?? 180), 1), 730);
+      try {
+        return await buildRecoveryReport(request.params.id, days);
+      } catch (err) {
+        app.log.error({ event: 'report.failed', message: (err as Error).message });
+        return reply.code(500).send({ error: (err as Error).message });
+      }
+    },
+  );
 
   app.get<{ Params: { id: string } }>('/api/onboard/:id/keycheck', async (request, reply) => {
     const { rows } = await query<{ rzp_key_id: string | null; rzp_key_secret_enc: Buffer | null }>(

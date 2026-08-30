@@ -191,3 +191,42 @@ export async function denialsByRule() {
   );
   return rows;
 }
+
+export interface OutreachRow {
+  id: string;
+  subscription_id: string;
+  customer_ref: string;
+  merchant_id: string;
+  amount_paise: number;
+  channel: string;
+  status: string;
+  recipient_masked: string | null;
+  error: string | null;
+  created_at: Date;
+  sent_at: Date | null;
+  viewed_at: Date | null;
+  converted_at: Date | null;
+  expires_at: Date;
+}
+
+export async function outreachLog(limit: number): Promise<OutreachRow[]> {
+  const { rows } = await query<OutreachRow>(
+    `SELECT o.id::text AS id, o.subscription_id, s.customer_ref, s.merchant_id,
+            s.amount_paise::bigint AS amount_paise,
+            o.channel, o.status, o.recipient_masked, o.error,
+            o.created_at, o.sent_at, o.viewed_at, o.converted_at, o.expires_at
+       FROM outreach o
+       JOIN subscription s ON s.id = o.subscription_id
+      ORDER BY o.created_at DESC
+      LIMIT $1`,
+    [limit],
+  );
+  return rows.map((r) => ({ ...r, amount_paise: Number(r.amount_paise) }));
+}
+
+export async function outreachFunnel(): Promise<Record<string, number>> {
+  const { rows } = await query<{ status: string; n: number }>(
+    `SELECT status, count(*)::int AS n FROM outreach GROUP BY status`,
+  );
+  return Object.fromEntries(rows.map((r) => [r.status, r.n]));
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
 import type { AtRiskRow, Control, DeclineRow, DecisionRow, DenialRow, Overview, UnmappedRow } from './api.ts';
-import { ChargeQueue, KillSwitch, MandateDetail, Merchants, Reports } from './views.tsx';
+import { ChargeQueue, KillSwitch, MandateDetail, Merchants, Outreach, Reports } from './views.tsx';
 import { bucketLabel, compactRupees, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
 
 interface Data {
@@ -16,6 +16,7 @@ interface Data {
 const TABS = [
   { route: '', label: 'Overview' },
   { route: 'queue', label: 'Charge queue' },
+  { route: 'outreach', label: 'Outreach' },
   { route: 'merchants', label: 'Merchants' },
   { route: 'reports', label: 'Reports' },
 ] as const;
@@ -38,6 +39,11 @@ function Masthead({ mode, route, killed }: { mode: string | null; route: string;
         ))}
       </nav>
       <div className="meta">
+        <nav className="site-links" aria-label="Product">
+          <a className="site-link" href="/onboard">Connect</a>
+          <a className="site-link" href="/authorize">Mandates</a>
+          <a className="site-link" href="/">Home</a>
+        </nav>
         {killed && <span className="mode is-live"><span className="dot" aria-hidden="true" />halted</span>}
         <span className={`mode${live ? ' is-live' : ''}`}>
           <span className="dot" aria-hidden="true" />
@@ -368,13 +374,14 @@ export default function App() {
     );
   }
 
-  if (route === 'queue' || route === 'merchants' || route === 'reports') {
+  if (route === 'queue' || route === 'merchants' || route === 'reports' || route === 'outreach') {
     const title = TABS.find((t) => t.route === route)?.label ?? '';
     return (
       <div className="shell">
         <Masthead mode={mode} route={route} killed={control?.kill_switch ?? false} />
         <div className="section-head"><h2>{title}</h2></div>
         {route === 'queue' && <ChargeQueue />}
+        {route === 'outreach' && <Outreach />}
         {route === 'merchants' && <Merchants />}
         {route === 'reports' && <Reports slug={param} />}
       </div>

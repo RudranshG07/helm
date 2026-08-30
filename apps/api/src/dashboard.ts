@@ -6,6 +6,8 @@ import {
   denialsByRule,
   overview,
   subscriptionDetail,
+  outreachFunnel,
+  outreachLog,
   unmappedCodes,
 } from './queries.ts';
 
@@ -27,6 +29,14 @@ export function registerDashboardRoutes(app: FastifyInstance): void {
     distribution: await declineDistribution(),
     unmapped: await unmappedCodes(),
   }));
+
+  app.get<{ Querystring: { limit?: string } }>('/api/outreach', async (request) => {
+    const limit = Math.min(500, Number(request.query.limit ?? 100) || 100);
+    return {
+      outreach: await outreachLog(limit),
+      funnel: await outreachFunnel(),
+    };
+  });
 
   app.get<{ Querystring: { limit?: string } }>('/api/decisions', async (request) => {
     const limit = Math.min(1000, Number(request.query.limit ?? 200) || 200);
