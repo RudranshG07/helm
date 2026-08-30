@@ -1,12 +1,32 @@
 import { useCallback, useEffect, useState } from 'react';
 import { rupees } from './format.ts';
 
+type RailStatus = 'usable' | 'disabled' | 'not_provisioned' | 'failing';
+
+interface Rail {
+  rail: string;
+  label: string;
+  status: RailStatus;
+  detail: string;
+  observed_failures: number;
+}
+
+interface Account {
+  probed: boolean;
+  activated: boolean;
+  rails: Rail[];
+  usable: string[];
+  verdict: 'live_ready' | 'blocked';
+  summary: string;
+}
+
 interface Config {
   ready: boolean;
   problem: string | null;
   key_id: string | null;
   mandates: { label: string; amount_paise: number }[];
   authorized: number;
+  account: Account;
 }
 
 interface Mandate {
@@ -17,8 +37,32 @@ interface Mandate {
   status: string;
 }
 
+interface BatchResult {
+  mandates: number;
+  amount_at_risk_paise: number;
+  amount_recovered_paise: number;
+  attempts_spent: number;
+  mandates_recovered: number;
+  duplicates_blocked: number;
+  exactly_once_held: boolean;
+}
+
 type State = 'idle' | 'preparing' | 'open' | 'saving' | 'done' | 'error';
 type PayMethod = 'emandate' | 'card';
+
+const STATUS_BADGE: Record<RailStatus, string> = {
+  usable: 'healthy',
+  failing: 'critical',
+  disabled: 'UNKNOWN',
+  not_provisioned: 'at_risk',
+};
+
+const STATUS_WORD: Record<RailStatus, string> = {
+  usable: 'ready',
+  failing: 'failing',
+  disabled: 'off',
+  not_provisioned: 'not provisioned',
+};
 
 declare global {
   interface Window {
@@ -44,7 +88,10 @@ export default function Authorize() {
   const [state, setState] = useState<State>('idle');
   const [message, setMessage] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
-  const [payMethod, setPayMethod] = useState<PayMethod>('card');
+  const [payMethod, setPayMethod] = useState<PayMethod>('emandate');
+  const [batch, setBatch] = useState<BatchResult | null>(null);
+  const [batchState, setBatchState] = useState<'idle' | 'running' | 'error'>('idle');
+  const [batchError, setBatchError] = useState<string | null>(null);
   const checkoutReady = useCheckoutScript();
 
   const refresh = useCallback(async () => {
@@ -57,6 +104,27 @@ export default function Authorize() {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  async function runBatch() {
+    setBatchState('running');
+    setBatchError(null);
+    try {
+      const result = await fetch('/api/authorize/demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: 40 }),
+      }).then(async (r) => {
+        const b = await r.json();
+        if (!r.ok) throw new Error(b.error ?? 'The batch could not run.');
+        return b as BatchResult;
+      });
+      setBatch(result);
+      setBatchState('idle');
+    } catch (err) {
+      setBatchError((err as Error).message);
+      setBatchState('error');
+    }
+  }
 
   async function authorize(label: string, amountPaise: number) {
     if (!window.Razorpay) { setMessage('Checkout has not loaded yet.'); setState('error'); return; }
@@ -85,8 +153,8 @@ export default function Authorize() {
         method: prep.method,
         ...(prep.bank ? { bank: prep.bank } : {}),
         name: 'Helm',
-        description: `${label} — ₹${amountPaise / 100} monthly mandate`,
-        prefill: { email: 'mandate@example.com', contact: '9999999999' },
+        description: `${label} — ${rupees(amountPaise)} monthly mandate`,
+        prefill: { email: 'mandate@helm.test', contact: '9876543210' },
         theme: { color: '#1d5f7e' },
         handler: async (response: { razorpay_payment_id: string }) => {
           setState('saving');
@@ -94,11 +162,7 @@ export default function Authorize() {
             const saved = await fetch('/api/authorize/complete', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                payment_id: response.razorpay_payment_id,
-                label,
-                amount_paise: amountPaise,
-              }),
+              body: JSON.stringify({ payment_id: response.razorpay_payment_id, label, amount_paise: amountPaise }),
             }).then(async (r) => {
               const b = await r.json();
               if (!r.ok) throw new Error(b.error ?? 'Could not save the mandate.');
@@ -132,88 +196,170 @@ export default function Authorize() {
   }
 
   if (!config) {
-    return <div className="shell onboard"><div className="skeleton tall" /></div>;
+    return (
+      <div className="shell onboard">
+        <div className="skeleton tall" />
+        <span className="visually-hidden">Checking what your Razorpay account can do</span>
+      </div>
+    );
   }
+
+  const account = config.account;
+  const blocked = !account.probed || account.verdict === 'blocked';
 
   return (
     <div className="shell onboard">
       <header className="masthead"><a className="wordmark" href="/">Helm</a></header>
 
-      <h1 className="onboard-title">Authorise test mandates</h1>
+      <h1 className="onboard-title">Authorise mandates</h1>
       <p className="onboard-lede">
         A recurring charge needs a mandate the customer approved, and approval happens in a browser.
-        Each one you authorise produces a real mandate token in test mode, which Helm can then
-        charge against.
+        Helm checks which rails your Razorpay account can actually use before asking you to try one.
       </p>
 
-      <div className="switch" role="tablist" aria-label="Authorisation method">
-        <button
-          type="button" role="tab" aria-selected={payMethod === 'emandate'}
-          className={`switch-opt${payMethod === 'emandate' ? ' is-on' : ''}`}
-          onClick={() => setPayMethod('emandate')}
-        >
-          e-mandate
-        </button>
-        <button
-          type="button" role="tab" aria-selected={payMethod === 'card'}
-          className={`switch-opt${payMethod === 'card' ? ' is-on' : ''}`}
-          onClick={() => setPayMethod('card')}
-        >
-          Card
-        </button>
-      </div>
+      <section>
+        <div className="section-head">
+          <h2>Your Razorpay account</h2>
+          <span className={`badge ${blocked ? 'critical' : 'healthy'}`}>
+            {account.probed ? (blocked ? 'blocked' : 'ready') : 'unreachable'}
+          </span>
+        </div>
+        <p className="onboard-lede" style={{ marginTop: -4 }}>{account.summary}</p>
 
-      <p className="onboard-lede" style={{ marginTop: -8 }}>
-        {payMethod === 'card'
-          ? 'Use the recurring-eligible test card below. A generic test card will be refused as not eligible.'
-          : 'Pick any bank, then choose Success on the simulated bank page.'}
-      </p>
+        {account.rails.length > 0 && (
+          <ul className="rails">
+            {account.rails.map((r) => (
+              <li className="rail paper" key={r.rail}>
+                <div className="rail-head">
+                  <span className="rail-name">{r.label}</span>
+                  <span className={`badge ${STATUS_BADGE[r.status]}`}>{STATUS_WORD[r.status]}</span>
+                </div>
+                <p className="rail-detail">{r.detail}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-      {!config.ready && (
-        <div className="form-error" role="alert">{config.problem}</div>
-      )}
-
-      {payMethod === 'card' && (
-        <div className="testcard paper">
-          <div className="testcard-label">Recurring-eligible test card</div>
-          <div className="testcard-grid">
-            <div><span>Number</span><code>4718 6091 0820 4366</code></div>
-            <div><span>Expiry</span><code>12 / 30</code></div>
-            <div><span>CVV</span><code>123</code></div>
-            <div><span>Name</span><code>Test User</code></div>
-          </div>
-          <p className="testcard-note">
-            Domestic Visa credit, the card Razorpay documents for subscriptions and tokenisation.
-            Generic test cards such as 4111 1111 1111 1111 are refused as not eligible for recurring.
-            On the OTP screen choose Success.
+      {blocked && (
+        <section className="blocked-panel paper">
+          <h2>No live rail can take a mandate yet</h2>
+          <p>
+            {account.activated
+              ? 'Every recurring rail on this account is either switched off or failing inside Razorpay.'
+              : 'This account has not finished activation. Card, UPI Autopay, eMandate and NACH are RBI-regulated recurring products, and Razorpay gates all of them behind activation even in test mode.'}
+            {' '}Complete activation in the Razorpay dashboard to authorise a live mandate here.
           </p>
-        </div>
+          <p>
+            You do not need it to see Helm work. The batch below runs the real decision engine,
+            the real policy checks and the real exactly-once executor against a simulated gateway.
+          </p>
+          <button type="button" className="cta" onClick={() => void runBatch()} disabled={batchState === 'running'}>
+            {batchState === 'running' ? 'Running…' : 'Run a recovery batch'}
+          </button>
+          <p className="field-note">
+            40 failed mandates. Every decision is recorded and appears on the dashboard.
+          </p>
+          {batchState === 'error' && batchError && (
+            <div className="form-error" role="alert">{batchError}</div>
+          )}
+        </section>
       )}
 
-      <div className="mandate-grid">
-        {config.mandates.map((m) => {
-          const busy = active === m.label && (state === 'preparing' || state === 'open' || state === 'saving');
-          return (
-            <div className="mandate-card paper" key={m.label}>
-              <div className="mandate-label">{m.label}</div>
-              <div className="mandate-amount">{rupees(m.amount_paise)}</div>
-              <div className="mandate-note">monthly · {payMethod === 'card' ? 'recurring card' : 'e-mandate'}</div>
-              <button
-                type="button" className="cta"
-                disabled={!config.ready || !checkoutReady || busy}
-                onClick={() => void authorize(m.label, m.amount_paise)}
-              >
-                {busy ? 'Opening…' : 'Authorise'}
-              </button>
+      {batch && (
+        <section>
+          <div className="section-head">
+            <h2>Batch result</h2>
+            <span className="badge healthy">simulated gateway</span>
+          </div>
+          <div className="tiles">
+            <div className="tile paper">
+              <span className="eyebrow">Recovered</span>
+              <strong className="num">{rupees(batch.amount_recovered_paise)}</strong>
+              <span className="hint">of {rupees(batch.amount_at_risk_paise)} at risk</span>
             </div>
-          );
-        })}
-      </div>
+            <div className="tile paper">
+              <span className="eyebrow">Mandates saved</span>
+              <strong className="num">{batch.mandates_recovered} / {batch.mandates}</strong>
+              <span className="hint">{batch.attempts_spent} attempts spent</span>
+            </div>
+            <div className="tile paper">
+              <span className="eyebrow">Exactly once</span>
+              <strong className="num">{batch.exactly_once_held ? 'held' : 'violated'}</strong>
+              <span className="hint">{batch.duplicates_blocked} duplicates blocked</span>
+            </div>
+          </div>
+          <p className="field-note" style={{ marginTop: 16 }}>
+            Amounts come from a simulated gateway, not real money. The decisions behind them are
+            the ones Helm would make on a live account. <a className="link" href="/dashboard">Open the dashboard</a>
+          </p>
+        </section>
+      )}
 
-      {message && (
-        <div className={state === 'error' ? 'form-error' : 'onboard-progress is-done'} role="status">
-          {message}
-        </div>
+      {!blocked && (
+        <section>
+          <div className="section-head"><h2>Authorise a live mandate</h2></div>
+
+          <div className="switch" role="tablist" aria-label="Authorisation method">
+            {(['emandate', 'card'] as PayMethod[]).map((m) => (
+              <button
+                key={m} type="button" role="tab" aria-selected={payMethod === m}
+                className={`switch-opt${payMethod === m ? ' is-on' : ''}`}
+                onClick={() => setPayMethod(m)}
+              >
+                {m === 'emandate' ? 'e-mandate' : 'Card'}
+              </button>
+            ))}
+          </div>
+
+          <p className="onboard-lede" style={{ marginTop: -8 }}>
+            {payMethod === 'card'
+              ? 'Use the recurring-eligible test card below. A generic test card is refused as not eligible.'
+              : 'Pick any bank, then choose Success on the simulated bank page.'}
+          </p>
+
+          {payMethod === 'card' && (
+            <div className="testcard paper">
+              <div className="testcard-label">Recurring-eligible test card</div>
+              <div className="testcard-grid">
+                <div><span>Number</span><code>4718 6091 0820 4366</code></div>
+                <div><span>Expiry</span><code>12 / 30</code></div>
+                <div><span>CVV</span><code>123</code></div>
+                <div><span>Name</span><code>Test User</code></div>
+              </div>
+              <p className="testcard-note">
+                Domestic Visa credit, the card Razorpay documents for subscriptions and tokenisation.
+                On the OTP screen choose Success.
+              </p>
+            </div>
+          )}
+
+          <div className="mandate-grid">
+            {config.mandates.map((m) => {
+              const busy = active === m.label && (state === 'preparing' || state === 'open' || state === 'saving');
+              return (
+                <div className="mandate-card paper" key={m.label}>
+                  <div className="mandate-label">{m.label}</div>
+                  <div className="mandate-amount">{rupees(m.amount_paise)}</div>
+                  <div className="mandate-note">monthly · {payMethod === 'card' ? 'recurring card' : 'e-mandate'}</div>
+                  <button
+                    type="button" className="cta"
+                    disabled={!config.ready || !checkoutReady || busy}
+                    onClick={() => void authorize(m.label, m.amount_paise)}
+                  >
+                    {busy ? 'Opening…' : 'Authorise'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {message && (
+            <div className={state === 'error' ? 'form-error' : 'onboard-progress is-done'} role="status">
+              {message}
+            </div>
+          )}
+        </section>
       )}
 
       <section>
@@ -222,7 +368,14 @@ export default function Authorize() {
           <span className="count">{mandates.length}</span>
         </div>
         {mandates.length === 0
-          ? <div className="state"><strong>None yet</strong>Authorise one above and it appears here.</div>
+          ? (
+            <div className="state">
+              <strong>None yet</strong>
+              {blocked
+                ? 'A live mandate needs an activated account. Run the batch above to see the engine work without one.'
+                : 'Authorise one above and it appears here.'}
+            </div>
+          )
           : (
             <div className="paper table-wrap">
               <table>
@@ -247,12 +400,6 @@ export default function Authorize() {
               </table>
             </div>
           )}
-        {mandates.length > 0 && (
-          <p className="field-note" style={{ marginTop: 16 }}>
-            {mandates.length} real mandate{mandates.length === 1 ? '' : 's'} authorised.
-            Helm can now create genuine recurring charges against {mandates.length === 1 ? 'it' : 'them'}.
-          </p>
-        )}
       </section>
     </div>
   );

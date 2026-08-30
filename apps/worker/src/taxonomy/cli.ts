@@ -8,8 +8,10 @@ const value = (name: string): string | undefined => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
+const merchant = value('merchant');
+
 const result = await reclassify({
-  merchantId: value('merchant'),
+  ...(merchant ? { merchantId: merchant } : {}),
   apply: flag('apply'),
   allowOpenCycles: flag('allow-open-cycles'),
 });

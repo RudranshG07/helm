@@ -29,6 +29,9 @@ importers:
       '@mandate/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@mandate/worker':
+        specifier: workspace:*
+        version: link:../worker
       fastify:
         specifier: ^5.2.1
         version: 5.12.1

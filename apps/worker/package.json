@@ -26,5 +26,8 @@
   "devDependencies": {
     "vitest": "^3.0.5",
     "@types/pg": "^8.11.10"
+  },
+  "exports": {
+    "./*": "./src/*.ts"
   }
 }

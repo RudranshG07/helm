@@ -9,6 +9,45 @@ afterAll(async () => {
   await close();
 });
 
+describe('every execution the batch performs is explainable after the fact', () => {
+  it('records a decision for each attempt it makes', async () => {
+    const r = await runLiveBatch({ count: 20, seed: 13, merchantId: MERCHANT });
+    expect(r.decisions_recorded).toBeGreaterThanOrEqual(r.attempts_spent);
+  });
+
+  it('leaves no execution without the decision that authorised it', async () => {
+    await runLiveBatch({ count: 20, seed: 17, merchantId: MERCHANT });
+    const { rows } = await query<{ orphans: number }>(
+      `SELECT count(*)::int AS orphans FROM execution_intent
+        WHERE subscription_id LIKE $1 AND decision_id IS NULL`,
+      [`${MERCHANT}:%`],
+    );
+    expect(rows[0]!.orphans).toBe(0);
+  });
+
+  it('points every decision at an execution that really happened', async () => {
+    await runLiveBatch({ count: 20, seed: 19, merchantId: MERCHANT });
+    const { rows } = await query<{ dangling: number }>(
+      `SELECT count(*)::int AS dangling FROM execution_intent ei
+        WHERE ei.subscription_id LIKE $1
+          AND ei.decision_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM decision d WHERE d.id = ei.decision_id)`,
+      [`${MERCHANT}:%`],
+    );
+    expect(rows[0]!.dangling).toBe(0);
+  });
+
+  it('records the rule that allowed each attempt, never a blank verdict', async () => {
+    await runLiveBatch({ count: 20, seed: 23, merchantId: MERCHANT });
+    const { rows } = await query<{ blank: number }>(
+      `SELECT count(*)::int AS blank FROM decision
+        WHERE subscription_id LIKE $1 AND (rule_id IS NULL OR rule_id = '' OR verdict IS NULL)`,
+      [`${MERCHANT}:%`],
+    );
+    expect(rows[0]!.blank).toBe(0);
+  });
+});
+
 describe('the batch runs through the real executor, not a probability draw', () => {
   it('writes one execution intent per attempt and exactly one order for each', async () => {
     const r = await runLiveBatch({ count: 20, seed: 7, merchantId: MERCHANT });

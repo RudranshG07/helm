@@ -744,3 +744,66 @@ h3.sub .count { margin-left: 8px; color: rgba(253, 241, 225, 0.45); font-family:
   letter-spacing: 0.02em; user-select: all;
 }
 .testcard-note { margin: 14px 0 0; color: var(--ink-faint); font-size: 12.5px; line-height: 1.45; }
+
+.rails {
+  list-style: none;
+  margin: 0 0 32px;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.rail {
+  padding: 18px 20px;
+  border-radius: var(--radius);
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.rail-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rail-detail {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.blocked-panel {
+  padding: 28px 30px;
+  border-radius: var(--radius);
+  margin-bottom: 36px;
+}
+
+.blocked-panel h2 {
+  margin: 0 0 12px;
+  font-family: var(--display);
+  font-size: 1.55rem;
+  line-height: 1.05;
+  color: var(--ink);
+}
+
+.blocked-panel p {
+  margin: 0 0 14px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  max-width: 62ch;
+}
+
+.blocked-panel .cta {
+  margin-top: 4px;
+}
+
+.blocked-panel .field-note {
+  margin-top: 12px;
+}

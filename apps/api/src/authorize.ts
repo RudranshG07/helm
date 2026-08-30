@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, withTransaction } from '@mandate/db';
+import { runLiveBatch } from '@mandate/worker/batch/live';
+import { probeAccount } from './account.ts';
 
 interface RzpOrder { id: string; amount: number; status: string }
 interface RzpCustomer { id: string }
@@ -56,6 +58,7 @@ export const MANDATE_SET = [
 ];
 
 const MERCHANT_ID = 'helm_test_account';
+const DEMO_MERCHANT_ID = 'helm_demo_batch';
 const MAX_AMOUNT_PAISE = 1_500_000;
 
 export function registerAuthorizeRoutes(app: FastifyInstance): void {
@@ -73,14 +76,19 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
         WHERE merchant_id = $1 AND rzp_token_id IS NOT NULL`,
       [MERCHANT_ID],
     );
+    const account = await probeAccount(ready ? process.env['RAZORPAY_KEY_ID'] : undefined);
+
     return {
       ready,
       problem,
       key_id: ready ? process.env['RAZORPAY_KEY_ID'] : null,
       mandates: MANDATE_SET,
       authorized: rows[0]!.n,
+      account,
     };
   });
+
+  app.get('/api/authorize/account', async () => probeAccount(process.env['RAZORPAY_KEY_ID']));
 
   app.post<{
     Body: { label?: string; amount_paise?: number; method?: string; contact?: string; email?: string };
@@ -100,8 +108,8 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
           method: 'POST',
           body: JSON.stringify({
             name: label,
-            contact: request.body?.contact ?? '9999999999',
-            email: request.body?.email ?? 'mandate@example.com',
+            contact: request.body?.contact ?? '9876543210',
+            email: request.body?.email ?? 'mandate@helm.test',
             fail_existing: '0',
           }),
         });
@@ -126,6 +134,7 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
               method: 'emandate',
               customer_id: customer.id,
               receipt: `helm_auth_${Date.now()}`,
+              payment_capture: true,
               token: {
                 auth_type: 'netbanking',
                 max_amount: maxAmount,
@@ -222,6 +231,19 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
       };
     },
   );
+
+  app.post<{ Body: { count?: number } }>('/api/authorize/demo', async (request, reply) => {
+    const count = Math.min(Math.max(Number(request.body?.count ?? 40), 1), 200);
+
+    try {
+      const result = await runLiveBatch({ count, merchantId: DEMO_MERCHANT_ID });
+      app.log.info({ event: 'authorize.demo_batch', count, merchant_id: DEMO_MERCHANT_ID });
+      return { ...result, simulated: true };
+    } catch (err) {
+      app.log.error({ event: 'authorize.demo_failed', message: (err as Error).message });
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
 
   app.get('/api/authorize/mandates', async () => {
     const { rows } = await query(

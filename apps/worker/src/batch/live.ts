@@ -20,6 +20,7 @@ export interface LiveBatchResult {
   duplicates_blocked: number;
   policy_refusals: Record<string, number>;
   orders_created: number;
+  decisions_recorded: number;
   exactly_once_held: boolean;
 }
 
@@ -72,6 +73,29 @@ export async function cleanup(merchantId: string): Promise<void> {
   await query(`DELETE FROM merchant WHERE id = $1`, [merchantId]);
 }
 
+async function recordDecision(
+  subscriptionId: string,
+  cycle: Date,
+  proposal: Proposal,
+  verdict: { verdict: string; rule_id: string; scheduled_for?: Date | string | null; explanation?: string },
+): Promise<number | null> {
+  const { rows } = await query<{ id: string }>(
+    `INSERT INTO decision (
+       subscription_id, cycle, proposed_action, proposed_by, confidence,
+       verdict, rule_id, scheduled_for, proposed_for, rationale, explanation
+     ) VALUES ($1,$2,$3,'allocator',$4,$5,$6,$7,$8,$9,$10)
+     RETURNING id::text AS id`,
+    [
+      subscriptionId, cycle, proposal.action, proposal.confidence ?? null,
+      verdict.verdict, verdict.rule_id,
+      verdict.scheduled_for ?? null, proposal.scheduled_for ?? null,
+      proposal.reason ?? null, verdict.explanation ?? null,
+    ],
+  );
+  const id = rows[0]?.id;
+  return id === undefined ? null : Number(id);
+}
+
 export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<LiveBatchResult> {
   const count = options.count ?? 40;
   const seed = options.seed ?? 20260902;
@@ -106,6 +130,7 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
     duplicates_blocked: 0,
     policy_refusals: {},
     orders_created: 0,
+    decisions_recorded: 0,
     exactly_once_held: true,
   };
 
@@ -140,6 +165,8 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
 
       if (verdict.verdict === 'DENY') {
         result.policy_refusals[verdict.rule_id] = (result.policy_refusals[verdict.rule_id] ?? 0) + 1;
+        await recordDecision(subscriptionId, m.cycle_start, proposal, verdict);
+        result.decisions_recorded += 1;
         break;
       }
       if (proposal.action === 'HOLD') {
@@ -154,9 +181,12 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
       const at = new Date(target);
       if (at >= m.cycle_end) break;
 
+      const decisionId = await recordDecision(subscriptionId, m.cycle_start, proposal, verdict);
+      result.decisions_recorded += 1;
+
       const outcome = await execute(
         {
-          decision_id: null,
+          decision_id: decisionId,
           subscription_id: subscriptionId,
           rzp_subscription_id: m.id,
           cycle: m.cycle_start,
