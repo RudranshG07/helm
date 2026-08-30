@@ -132,7 +132,7 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
                 expire_at: expireAt,
                 bank_account: {
                   beneficiary_name: label,
-                  account_number: '11214311215411',
+                  account_number: '1121431121541121',
                   account_type: 'savings',
                   ifsc_code: 'HDFC0000053',
                 },
@@ -152,6 +152,7 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
           label,
           amount_paise: amount,
           method,
+          bank: method === 'emandate' ? 'HDFC' : null,
         };
       } catch (err) {
         app.log.error({ event: 'authorize.prepare_failed', message: (err as Error).message });

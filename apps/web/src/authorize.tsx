@@ -72,7 +72,7 @@ export default function Authorize() {
       }).then(async (r) => {
         const b = await r.json();
         if (!r.ok) throw new Error(b.error ?? 'Could not prepare the mandate.');
-        return b as { order_id: string; customer_id: string; key_id: string };
+        return b as { order_id: string; customer_id: string; key_id: string; method: string; bank: string | null };
       });
 
       setState('open');
@@ -82,6 +82,8 @@ export default function Authorize() {
         order_id: prep.order_id,
         customer_id: prep.customer_id,
         recurring: '1',
+        method: prep.method,
+        ...(prep.bank ? { bank: prep.bank } : {}),
         name: 'Helm',
         description: `${label} — ₹${amountPaise / 100} monthly mandate`,
         prefill: { email: 'mandate@example.com', contact: '9999999999' },
