@@ -1,6 +1,10 @@
 import {
+  AGENT_MODEL,
   AnthropicProposalClient,
   MockProposalClient,
+  OpenAICompatProposalClient,
+  PROVIDER_PRESETS,
+  keyLooksValid,
   SuccessModel,
   PDN_MIN_LEAD_MS,
   addMs,
@@ -199,7 +203,64 @@ async function killSwitchEngaged(client: PoolClient): Promise<boolean> {
 }
 
 export function makeProposalClient(): ProposalClient {
-  if (process.env['ANTHROPIC_API_KEY']) return new AnthropicProposalClient();
+  const explicit = process.env['AGENT_PROVIDER'];
+
+  if (explicit === 'mock') {
+    log.info('agent.provider', { provider: 'mock', reason: 'AGENT_PROVIDER=mock' });
+    return new MockProposalClient();
+  }
+
+  const anthropicKey = process.env['ANTHROPIC_API_KEY'];
+  const anthropicUsable = keyLooksValid('ANTHROPIC_API_KEY', anthropicKey);
+
+  if (anthropicKey && !anthropicUsable) {
+    log.warn('agent.key_wrong_shape', {
+      env: 'ANTHROPIC_API_KEY',
+      expected: 'sk-ant-',
+      action: 'ignored, looking for another provider',
+    });
+  }
+
+  if (explicit === 'anthropic' || (!explicit && anthropicUsable)) {
+    if (!anthropicUsable) {
+      log.warn('agent.no_api_key', { provider: 'anthropic', using: 'mock' });
+      return new MockProposalClient();
+    }
+    const model = process.env['AGENT_MODEL'];
+    log.info('agent.provider', { provider: 'anthropic', model: model ?? AGENT_MODEL });
+    return new AnthropicProposalClient(model ? { model } : {});
+  }
+
+  const presetName = explicit ?? Object.keys(PROVIDER_PRESETS)
+    .find((name) => {
+      const preset = PROVIDER_PRESETS[name]!;
+      return preset.name !== 'ollama'
+        && keyLooksValid(preset.keyEnv, process.env[preset.keyEnv]);
+    });
+
+  const preset = presetName ? PROVIDER_PRESETS[presetName] : undefined;
+
+  if (preset) {
+    const apiKey = process.env[preset.keyEnv];
+    if (preset.name !== 'ollama' && !keyLooksValid(preset.keyEnv, apiKey)) {
+      log.warn('agent.no_api_key', { provider: preset.name, expected: preset.keyEnv, using: 'mock' });
+      return new MockProposalClient();
+    }
+    const baseUrl = process.env['AGENT_BASE_URL'] ?? preset.baseUrl;
+    const model = process.env['AGENT_MODEL'] ?? preset.model;
+    log.info('agent.provider', { provider: preset.name, model, free: preset.free });
+    return new OpenAICompatProposalClient({ baseUrl, apiKey, model });
+  }
+
+  if (process.env['AGENT_BASE_URL']) {
+    const baseUrl = process.env['AGENT_BASE_URL'];
+    const model = process.env['AGENT_MODEL'] ?? 'llama-3.3-70b-versatile';
+    log.info('agent.provider', { provider: 'openai_compat', model });
+    return new OpenAICompatProposalClient({
+      baseUrl, model, apiKey: process.env['AGENT_API_KEY'],
+    });
+  }
+
   log.warn('agent.no_api_key', { using: 'mock' });
   return new MockProposalClient();
 }

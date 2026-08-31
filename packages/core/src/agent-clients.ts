@@ -15,7 +15,7 @@ const ProposalSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
-export const AGENT_MODEL = 'claude-opus-5';
+export const AGENT_MODEL = 'claude-haiku-4-5-20251001';
 
 export class AnthropicProposalClient implements ProposalClient {
   private readonly client: Anthropic;
@@ -33,9 +33,8 @@ export class AnthropicProposalClient implements ProposalClient {
     try {
       const response = await this.client.messages.parse({
         model: this.model,
-        max_tokens: 16000,
+        max_tokens: 1024,
         system: SYSTEM_PROMPT,
-        thinking: { type: 'adaptive' },
         output_config: { format: zodOutputFormat(ProposalSchema) },
         messages: [{ role: 'user', content: buildPrompt(ctx) }],
       });
