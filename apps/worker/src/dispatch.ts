@@ -4,6 +4,7 @@ import { query } from '@mandate/db';
 import { config } from './config.ts';
 import { loadPolicyContext } from './context.ts';
 import { shiftIfNeeded } from './holidays.ts';
+import { openPromiseFor } from './promise.ts';
 import { execute } from './executor.ts';
 import { sendOutreach } from './outreach/send.ts';
 import type { OutreachProvider } from './outreach/provider.ts';
@@ -164,7 +165,33 @@ export async function dispatchDue(gateway: Gateway, now = new Date()): Promise<n
         continue;
       }
 
-      const shift = await shiftIfNeeded(row.scheduled_for, row.method);
+      const promise = await openPromiseFor(row.subscription_id, row.cycle);
+      let plannedFor = row.scheduled_for;
+
+      if (promise && promise.attempt_at > now && promise.attempt_at.getTime() !== plannedFor.getTime()) {
+        plannedFor = promise.attempt_at;
+        await query(
+          `UPDATE decision
+              SET scheduled_for = $2,
+                  explanation = explanation || ' Moved to the date the customer promised: ' || $3
+            WHERE id = $1`,
+          [row.decision_id, plannedFor, promise.promised_for],
+        );
+        log.info('dispatch.promise_honoured', {
+          decision_id: row.decision_id,
+          promised_for: promise.promised_for,
+        });
+      }
+
+      if (plannedFor > now) {
+        log.info('dispatch.waiting_for_promise', {
+          decision_id: row.decision_id,
+          until: plannedFor.toISOString(),
+        });
+        continue;
+      }
+
+      const shift = await shiftIfNeeded(plannedFor, row.method);
       if (shift.shifted) {
         await query(
           `UPDATE decision SET scheduled_for = $2,

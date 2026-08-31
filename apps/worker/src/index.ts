@@ -6,6 +6,7 @@ import { isSweepDue, nightlySweep } from './nightly.ts';
 import { runOnboardingJobs } from './onboarding.ts';
 import { dispatchDue, dispatchOutreach } from './dispatch.ts';
 import { makeOutreachProvider } from './outreach/provider.ts';
+import { resolvePromises } from './promise.ts';
 import { reconcileStuck } from './executor.ts';
 import { makeGateway } from './gateway-factory.ts';
 import { ingestBatch } from './ingest.ts';
@@ -38,6 +39,11 @@ async function tick(): Promise<void> {
   const dispatched = await dispatchDue(gateway);
   if (dispatched > 0) {
     log.info('dispatch.batch', { dispatched });
+  }
+
+  const promises = await resolvePromises();
+  if (promises.kept + promises.broken > 0) {
+    log.info('promise.settled', promises);
   }
 
   const contacted = await dispatchOutreach(outreachProvider);

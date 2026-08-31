@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
 import type { AtRiskRow, Control, DeclineRow, DecisionRow, DenialRow, Overview, UnmappedRow } from './api.ts';
-import { ChargeQueue, KillSwitch, MandateDetail, Merchants, Outreach, Reports } from './views.tsx';
+import { ChargeQueue, KillSwitch, MandateDetail, Merchants, Outreach, Reports, Trace } from './views.tsx';
 import { bucketLabel, compactRupees, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
 
 interface Data {
@@ -147,6 +147,9 @@ function Decisions({ rows, denials }: { rows: DecisionRow[]; denials: DenialRow[
                   <time className="when" dateTime={d.created_at} title={ist(d.created_at)}>
                     {sinceNow(d.created_at)}
                   </time>
+                  <a className="trace-link" href={`#/trace/${encodeURIComponent(String(d.id))}`}>
+                    why?
+                  </a>
                 </div>
                 <p className="explain">{d.explanation}</p>
                 {d.rationale && <p className="said">{d.rationale}</p>}
@@ -370,6 +373,16 @@ export default function App() {
         <Masthead mode={mode} route="" killed={control?.kill_switch ?? false} />
         <a className="back" href="#/">&larr; All mandates</a>
         <MandateDetail id={param} />
+      </div>
+    );
+  }
+
+  if (route === 'trace' && param) {
+    return (
+      <div className="shell">
+        <Masthead mode={mode} route={route} killed={control?.kill_switch ?? false} />
+        <a className="back link" href="#/">← Overview</a>
+        <Trace id={param} />
       </div>
     );
   }

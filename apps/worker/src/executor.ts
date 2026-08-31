@@ -1,4 +1,5 @@
-import { idempotencyKey, orderReceipt } from '@mandate/core';
+import { TAXONOMY_VERSION, classify, countsAgainstBudget, idempotencyKey, orderReceipt } from '@mandate/core';
+import type { Method } from '@mandate/core';
 import { query, withTransaction } from '@mandate/db';
 import type { PoolClient } from 'pg';
 import { config } from './config.ts';
@@ -42,6 +43,7 @@ export interface ExecutorOptions {
   gateway: Gateway;
   dryRun?: boolean;
   crashAt?: CrashPoint;
+  initiatedBy?: 'mandate_rescue' | 'razorpay_default';
 }
 
 async function guardsPassed(client: PoolClient, subscriptionId: string): Promise<string | null> {
@@ -169,14 +171,80 @@ export async function execute(
   if (crashAt === 'before_settle') throw new SimulatedCrash(crashAt);
 
   if (payment && (payment.status === 'captured' || payment.status === 'failed')) {
-    await settle(key, payment);
+    await settle(key, payment, options.initiatedBy ?? 'mandate_rescue');
   }
 
   log.info('executor.submitted', { key, order_id: order.id, payment_status: payment?.status ?? null });
   return { status: 'executed', key, order_id: order.id, payment };
 }
 
-async function settle(key: string, payment: PaymentRef): Promise<void> {
+async function recordAttempt(
+  key: string,
+  payment: PaymentRef,
+  initiatedBy: 'mandate_rescue' | 'razorpay_default',
+): Promise<void> {
+  const { rows } = await query<{
+    subscription_id: string; cycle: Date; amount_paise: number;
+    method: Method; issuer: string | null; rzp_order_id: string | null;
+    recovering_bucket: string | null;
+  }>(
+    `SELECT i.subscription_id, i.cycle, i.amount_paise, i.rzp_order_id, s.method,
+            (SELECT pa.issuer FROM payment_attempt pa
+              WHERE pa.subscription_id = i.subscription_id AND pa.issuer IS NOT NULL
+              ORDER BY pa.attempted_at DESC LIMIT 1) AS issuer,
+            (SELECT pa.bucket FROM payment_attempt pa
+              WHERE pa.subscription_id = i.subscription_id AND pa.cycle = i.cycle
+                AND pa.status = 'failed' AND pa.bucket IS NOT NULL
+              ORDER BY pa.attempted_at DESC LIMIT 1) AS recovering_bucket
+       FROM execution_intent i
+       JOIN subscription s ON s.id = i.subscription_id
+      WHERE i.idempotency_key = $1`,
+    [key],
+  );
+
+  const intent = rows[0];
+  if (!intent) return;
+
+  const err = {
+    error_reason: payment.error_reason ?? null,
+    error_source: null,
+    error_step: null,
+    error_code: null,
+  };
+
+  const bucket = payment.status === 'captured'
+    ? intent.recovering_bucket ?? null
+    : classify(err, intent.method).bucket;
+
+  await query(
+    `INSERT INTO payment_attempt (
+       subscription_id, rzp_payment_id, rzp_order_id, cycle, attempted_at, status, amount_paise,
+       error_reason, issuer, initiated_by, source, bucket, taxonomy_version, counts_against_budget
+     ) VALUES ($1,$2,$3,$4,clock_timestamp(),$5,$6,$7,$8,$12,'executor',$9,$10,$11)
+     ON CONFLICT (rzp_payment_id) WHERE rzp_payment_id IS NOT NULL DO UPDATE SET
+       status = EXCLUDED.status,
+       bucket = EXCLUDED.bucket,
+       initiated_by = EXCLUDED.initiated_by
+     WHERE payment_attempt.subscription_id = EXCLUDED.subscription_id
+       AND payment_attempt.cycle = EXCLUDED.cycle`,
+    [
+      intent.subscription_id, payment.id, intent.rzp_order_id, intent.cycle,
+      payment.status, intent.amount_paise, payment.error_reason ?? null, intent.issuer,
+      bucket, TAXONOMY_VERSION, countsAgainstBudget(err),
+      initiatedBy,
+    ],
+  );
+
+  log.info('executor.attempt_recorded', {
+    key, subscription_id: intent.subscription_id, status: payment.status, initiated_by: initiatedBy,
+  });
+}
+
+async function settle(
+  key: string,
+  payment: PaymentRef,
+  initiatedBy: 'mandate_rescue' | 'razorpay_default' = 'mandate_rescue',
+): Promise<void> {
   await query(
     `UPDATE execution_intent
         SET state = $2, rzp_payment_id = $3, settled_at = clock_timestamp(), last_error = $4
@@ -196,6 +264,7 @@ async function settle(key: string, payment: PaymentRef): Promise<void> {
       WHERE i.idempotency_key = $1 AND d.id = i.decision_id`,
     [key, payment.status === 'captured' ? 'recovered' : 'failed'],
   );
+  await recordAttempt(key, payment, initiatedBy);
 }
 
 async function reconcileOne(key: string, receipt: string, gateway: Gateway): Promise<ExecutionResult> {

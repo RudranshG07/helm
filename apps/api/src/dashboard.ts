@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { buildDecisionTrace } from '@mandate/worker/trace/decision';
 import {
   atRisk,
   decisionLog,
@@ -29,6 +30,15 @@ export function registerDashboardRoutes(app: FastifyInstance): void {
     distribution: await declineDistribution(),
     unmapped: await unmappedCodes(),
   }));
+
+  app.get<{ Params: { id: string } }>('/api/decisions/:id/trace', async (request, reply) => {
+    if (!/^\d+$/.test(request.params.id)) {
+      return reply.code(400).send({ error: 'decision id must be numeric' });
+    }
+    const trace = await buildDecisionTrace(request.params.id);
+    if (!trace) return reply.code(404).send({ error: 'unknown decision' });
+    return trace;
+  });
 
   app.get<{ Querystring: { limit?: string } }>('/api/outreach', async (request) => {
     const limit = Math.min(500, Number(request.query.limit ?? 100) || 100);

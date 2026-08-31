@@ -171,6 +171,7 @@ export const api = {
   control: () => get<Control>('/api/control'),
   setKillSwitch: (engaged: boolean, token?: string, reason?: string) =>
     post<{ kill_switch: boolean }>('/api/control/kill-switch', { engaged, token, reason }),
+  trace: (id: string) => get<DecisionTrace>(`/api/decisions/${encodeURIComponent(id)}/trace`),
   outreach: () => get<{ outreach: OutreachRow[]; funnel: Record<string, number> }>('/api/outreach?limit=200'),
   chargeQueue: () => get<{ queue: QueueRow[]; note: string }>('/api/charge-queue'),
   reports: () => get<{ reports: { slug: string; file: string }[] }>('/api/reports'),
@@ -197,4 +198,37 @@ export interface OutreachRow {
   viewed_at: string | null;
   converted_at: string | null;
   expires_at: string;
+}
+
+export interface TraceStep {
+  stage: string;
+  headline: string;
+  detail: string;
+  facts: Record<string, string | number | boolean | null>;
+}
+
+export interface Counterfactual {
+  default_at: string;
+  default_in_peak: boolean;
+  default_p: number;
+  default_evidence: number;
+  chosen_at: string | null;
+  chosen_in_peak: boolean;
+  chosen_p: number;
+  chosen_evidence: number;
+  edge: number;
+  verdict: string;
+}
+
+export interface DecisionTrace {
+  decision_id: string;
+  subscription_id: string;
+  customer_ref: string;
+  merchant_id: string;
+  amount_paise: number;
+  arm: string | null;
+  steps: TraceStep[];
+  counterfactual: Counterfactual | null;
+  outcome: string | null;
+  headline: string;
 }

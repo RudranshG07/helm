@@ -4,6 +4,7 @@ import { query, withTransaction } from '@mandate/db';
 import { execute } from '../executor.ts';
 import { buildPlan, planToProposal } from '../planner.ts';
 import { log } from '../log.ts';
+import { assignArm } from '../arms.ts';
 import { SimulatedGateway } from './simulator.ts';
 import type { GenerativeModel } from './simulator.ts';
 import { generateMandates } from './run.ts';
@@ -21,6 +22,12 @@ export interface LiveBatchResult {
   policy_refusals: Record<string, number>;
   orders_created: number;
   decisions_recorded: number;
+  control_mandates: number;
+  control_attempts: number;
+  control_recovered_paise: number;
+  control_mandates_recovered: number;
+  treatment_mandates: number;
+  treatment_attempts: number;
   exactly_once_held: boolean;
 }
 
@@ -65,6 +72,12 @@ async function seedMandates(merchantId: string, mandates: Mandate[]): Promise<vo
 }
 
 export async function cleanup(merchantId: string): Promise<void> {
+  await query(
+    `DELETE FROM outreach o USING subscription s
+      WHERE o.subscription_id = s.id AND s.merchant_id = $1`, [merchantId]);
+  await query(
+    `DELETE FROM arm_assignment a USING subscription s
+      WHERE a.subscription_id = s.id AND s.merchant_id = $1`, [merchantId]);
   await query(`DELETE FROM execution_intent WHERE subscription_id LIKE $1`, [`${merchantId}:%`]);
   await query(`DELETE FROM decision WHERE subscription_id LIKE $1`, [`${merchantId}:%`]);
   await query(`DELETE FROM mandate_health WHERE subscription_id LIKE $1`, [`${merchantId}:%`]);
@@ -94,6 +107,43 @@ async function recordDecision(
   );
   const id = rows[0]?.id;
   return id === undefined ? null : Number(id);
+}
+
+async function runControlArm(
+  m: Mandate,
+  subscriptionId: string,
+  gateway: SimulatedGateway,
+  now: Date,
+): Promise<{ attempts: number; recovered: boolean }> {
+  let attempts = 0;
+  const start = m.first_failure_at > now ? m.first_failure_at : now;
+
+  for (let day = 1; day < NPCI_ATTEMPT_BUDGET; day += 1) {
+    const at = new Date(start.getTime() + day * 86_400_000);
+    if (at >= m.cycle_end) break;
+
+    const outcome = await execute(
+      {
+        decision_id: null,
+        subscription_id: subscriptionId,
+        rzp_subscription_id: m.id,
+        cycle: m.cycle_start,
+        attempt_number: attempts + 1,
+        amount_paise: m.amount_paise,
+        scheduled_for: at,
+      },
+      { gateway, dryRun: false, initiatedBy: 'razorpay_default' },
+    );
+
+    if (outcome.status === 'duplicate' || outcome.status === 'blocked') break;
+    attempts += 1;
+
+    if (outcome.status === 'executed' && outcome.payment?.status === 'captured') {
+      return { attempts, recovered: true };
+    }
+  }
+
+  return { attempts, recovered: false };
 }
 
 export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<LiveBatchResult> {
@@ -131,11 +181,31 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
     policy_refusals: {},
     orders_created: 0,
     decisions_recorded: 0,
+    control_mandates: 0,
+    control_attempts: 0,
+    control_recovered_paise: 0,
+    control_mandates_recovered: 0,
+    treatment_mandates: 0,
+    treatment_attempts: 0,
     exactly_once_held: true,
   };
 
   for (const m of mandates) {
     const subscriptionId = `${merchantId}:${m.id}`;
+    const arm = await assignArm(subscriptionId, `${merchantId}|${seed}`);
+
+    if (arm === 'control') {
+      result.control_mandates += 1;
+      const outcome = await runControlArm(m, subscriptionId, gateway, now);
+      result.control_attempts += outcome.attempts;
+      if (outcome.recovered) {
+        result.control_recovered_paise += m.amount_paise;
+        result.control_mandates_recovered += 1;
+      }
+      continue;
+    }
+
+    result.treatment_mandates += 1;
     let recovered = false;
     let attemptsUsed = 1;
     let cursor = m.first_failure_at > now ? m.first_failure_at : now;
@@ -205,6 +275,7 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
 
       result.intents_written += 1;
       result.attempts_spent += 1;
+      result.treatment_attempts += 1;
       attemptsUsed += 1;
       cursor = at;
 
@@ -235,8 +306,9 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
        FROM execution_intent WHERE subscription_id LIKE $1`,
     [`${merchantId}:%`],
   );
+  const chargesAcrossBothArms = result.treatment_attempts + result.control_attempts;
   result.exactly_once_held =
-    rows[0]!.keys === rows[0]!.intents && gateway.attemptsMade === result.attempts_spent;
+    rows[0]!.keys === rows[0]!.intents && gateway.attemptsMade === chargesAcrossBothArms;
 
   if (!result.exactly_once_held) {
     log.error('live_batch.exactly_once_violated', {

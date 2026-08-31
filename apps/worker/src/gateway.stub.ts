@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { DuplicateReceiptError } from './gateway.ts';
 import type { ChargeRequest, Gateway, OrderRef, PaymentRef } from './gateway.ts';
 
@@ -11,6 +12,7 @@ export class StubGateway implements Gateway {
   public readonly lookupCalls: string[] = [];
   private readonly orders = new Map<string, { order: OrderRef; payments: PaymentRef[] }>();
   private seq = 0;
+  private readonly run = randomBytes(4).toString('hex');
 
   private readonly options: StubOptions;
 
@@ -33,9 +35,9 @@ export class StubGateway implements Gateway {
     }
 
     this.seq += 1;
-    const order: OrderRef = { id: `order_stub_${this.seq}`, receipt: req.receipt };
+    const order: OrderRef = { id: `order_stub_${this.run}_${this.seq}`, receipt: req.receipt };
     const status = this.options.paymentStatus ?? 'captured';
-    const payment: PaymentRef = { id: `pay_stub_${this.seq}`, status };
+    const payment: PaymentRef = { id: `pay_stub_${this.run}_${this.seq}`, status };
 
     this.orders.set(req.receipt, { order, payments: [payment] });
     return { order, payment };

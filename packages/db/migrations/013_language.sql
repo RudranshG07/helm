@@ -1,0 +1,5 @@
+ALTER TABLE subscription
+  ADD COLUMN IF NOT EXISTS contact_language TEXT NOT NULL DEFAULT 'en';
+
+ALTER TABLE outreach
+  ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en';

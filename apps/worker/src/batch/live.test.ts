@@ -15,14 +15,30 @@ describe('every execution the batch performs is explainable after the fact', () 
     expect(r.decisions_recorded).toBeGreaterThanOrEqual(r.attempts_spent);
   });
 
-  it('leaves no execution without the decision that authorised it', async () => {
+  it('leaves no treatment execution without the decision that authorised it', async () => {
     await runLiveBatch({ count: 20, seed: 17, merchantId: MERCHANT });
     const { rows } = await query<{ orphans: number }>(
-      `SELECT count(*)::int AS orphans FROM execution_intent
-        WHERE subscription_id LIKE $1 AND decision_id IS NULL`,
+      `SELECT count(*)::int AS orphans
+         FROM execution_intent i
+         JOIN arm_assignment a ON a.subscription_id = i.subscription_id
+        WHERE i.subscription_id LIKE $1
+          AND a.arm = 'treatment'
+          AND i.decision_id IS NULL`,
       [`${MERCHANT}:%`],
     );
     expect(rows[0]!.orphans).toBe(0);
+  });
+
+  it('records no Helm decision for a control mandate, because there is none to make', async () => {
+    await runLiveBatch({ count: 20, seed: 17, merchantId: MERCHANT });
+    const { rows } = await query<{ leaked: number }>(
+      `SELECT count(*)::int AS leaked
+         FROM decision d
+         JOIN arm_assignment a ON a.subscription_id = d.subscription_id
+        WHERE d.subscription_id LIKE $1 AND a.arm = 'control'`,
+      [`${MERCHANT}:%`],
+    );
+    expect(rows[0]!.leaked).toBe(0);
   });
 
   it('points every decision at an execution that really happened', async () => {
@@ -53,9 +69,16 @@ describe('the batch runs through the real executor, not a probability draw', () 
     const r = await runLiveBatch({ count: 20, seed: 7, merchantId: MERCHANT });
 
     expect(r.attempts_spent).toBeGreaterThan(0);
-    expect(r.intents_written).toBe(r.attempts_spent);
-    expect(r.orders_created).toBe(r.attempts_spent);
+    expect(r.intents_written).toBe(r.treatment_attempts);
+    expect(r.orders_created).toBe(r.treatment_attempts + r.control_attempts);
     expect(r.exactly_once_held).toBe(true);
+  });
+
+  it('splits the population into both arms so the comparison has a control', async () => {
+    const r = await runLiveBatch({ count: 40, seed: 7, merchantId: MERCHANT });
+    expect(r.control_mandates).toBeGreaterThan(0);
+    expect(r.treatment_mandates).toBeGreaterThan(0);
+    expect(r.control_mandates + r.treatment_mandates).toBe(r.mandates);
   });
 
   it('every idempotency key is unique across the whole batch', async () => {

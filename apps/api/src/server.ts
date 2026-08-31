@@ -47,6 +47,19 @@ app.addContentTypeParser(
   },
 );
 
+app.addContentTypeParser(
+  'application/x-www-form-urlencoded',
+  { parseAs: 'string' },
+  (_req, body, done) => {
+    try {
+      const params = new URLSearchParams(body as string);
+      done(null, Object.fromEntries(params.entries()));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  },
+);
+
 app.get('/health', async () => {
   await query('SELECT 1');
   return { ok: true, mode: config.mode, dry_run: config.dryRun };

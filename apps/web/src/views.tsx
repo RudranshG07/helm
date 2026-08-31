@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.ts';
-import type { Control, Detail, Merchant, OutreachRow, QueueRow } from './api.ts';
+import type { Control, Detail, DecisionTrace, Merchant, OutreachRow, QueueRow } from './api.ts';
 import { Markdown } from './markdown.tsx';
 import { bucketLabel, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
 
@@ -436,6 +436,97 @@ export function Outreach() {
           </tbody>
         </table>
       </div>
+    </>
+  );
+}
+
+export function Trace({ id }: { id: string }) {
+  const [trace, setTrace] = useState<DecisionTrace | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTrace(null);
+    setError(null);
+    api.trace(id).then(setTrace).catch((e: Error) => setError(e.message));
+  }, [id]);
+
+  if (error) {
+    return (
+      <div className="state is-error">
+        <strong>Could not trace that decision</strong>{error}
+        <a className="link" href="#/">Back to the overview</a>
+      </div>
+    );
+  }
+  if (!trace) return <div className="skeleton tall" />;
+
+  const c = trace.counterfactual;
+
+  return (
+    <>
+      <div className="detail-head">
+        <div>
+          <span className="eyebrow">Decision {trace.decision_id}</span>
+          <h2 className="detail-title">{trace.customer_ref}</h2>
+          <div className="detail-meta">
+            <span className="num amount">{rupees(trace.amount_paise)}</span>
+            {trace.arm && <span className="badge healthy">{trace.arm}</span>}
+            {trace.outcome && <span className="badge SOFT_LIQUIDITY">{trace.outcome}</span>}
+            <a className="ref link" href={`#/mandate/${encodeURIComponent(trace.subscription_id)}`}>
+              {trace.subscription_id}
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <p className="trace-headline">{trace.headline}</p>
+
+      {c && (
+        <div className="counterfactual paper">
+          <div className="eyebrow">What the default schedule would have done</div>
+          <div className="cf-grid">
+            <div className="cf-arm">
+              <span className="cf-label">Razorpay default</span>
+              <strong className="num">{(c.default_p * 100).toFixed(1)}%</strong>
+              <span className="hint">{c.default_at}</span>
+              <span className="hint">{c.default_in_peak ? 'inside a contested window' : 'outside peak'} · evidence {c.default_evidence}</span>
+            </div>
+            <div className="cf-arrow" aria-hidden="true">→</div>
+            <div className="cf-arm is-ours">
+              <span className="cf-label">Helm chose</span>
+              <strong className="num">{(c.chosen_p * 100).toFixed(1)}%</strong>
+              <span className="hint">{c.chosen_at}</span>
+              <span className="hint">{c.chosen_in_peak ? 'inside a contested window' : 'outside peak'} · evidence {c.chosen_evidence}</span>
+            </div>
+          </div>
+          <p className="cf-verdict">{c.verdict}</p>
+        </div>
+      )}
+
+      <ol className="trace">
+        {trace.steps.map((s, i) => (
+          <li className="trace-step" key={s.stage}>
+            <span className="trace-index" aria-hidden="true">{i + 1}</span>
+            <div className="trace-body paper">
+              <span className="eyebrow">{s.stage}</span>
+              <h3>{s.headline}</h3>
+              <p>{s.detail}</p>
+              {Object.entries(s.facts).filter(([, v]) => v !== null && v !== '').length > 0 && (
+                <dl className="trace-facts">
+                  {Object.entries(s.facts)
+                    .filter(([, v]) => v !== null && v !== '')
+                    .map(([k, v]) => (
+                      <div key={k}>
+                        <dt>{k.replace(/_/g, ' ')}</dt>
+                        <dd>{String(v)}</dd>
+                      </div>
+                    ))}
+                </dl>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
     </>
   );
 }

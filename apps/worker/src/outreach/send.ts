@@ -1,10 +1,12 @@
 import {
+  buildMessage,
   maskRecipient,
   nextSendableTime,
   outreachExpiry,
   outreachIdempotencyKey,
   outreachToken,
   pickChannel,
+  resolveLanguage,
 } from '@mandate/core';
 import { query, withTransaction } from '@mandate/db';
 import type { PoolClient } from 'pg';
@@ -33,6 +35,8 @@ interface Target {
   customer_ref: string;
   amount_paise: string;
   current_end: Date | null;
+  contact_language: string;
+  merchant_name: string;
   kill_switch: boolean;
   write_enabled: boolean;
 }
@@ -40,6 +44,7 @@ interface Target {
 const TARGET_SQL = `
   SELECT s.contact_email, s.contact_phone, s.outreach_opted_out, s.customer_ref,
          s.amount_paise::text AS amount_paise, s.current_end,
+         COALESCE(s.contact_language, 'en') AS contact_language, m.name AS merchant_name,
          c.kill_switch, m.write_enabled
     FROM subscription s
     JOIN merchant m ON m.id = s.merchant_id
@@ -51,20 +56,7 @@ function linkFor(token: string): string {
   return `${base.replace(/\/+$/, '')}/r/${token}`;
 }
 
-function bodyFor(customerRef: string, amountPaise: number, link: string): string {
-  const rupees = `₹${Math.round(amountPaise / 100).toLocaleString('en-IN')}`;
-  return [
-    `Hello ${customerRef},`,
-    '',
-    `Your ${rupees} monthly payment could not be collected, and the bank will not let us try`,
-    'again on the current authorisation.',
-    '',
-    `Re-authorise here so the subscription stays active: ${link}`,
-    '',
-    'If you would rather stop, use the same link and choose to cancel. You will not be',
-    'contacted about this charge again.',
-  ].join('\n');
-}
+
 
 async function claim(client: PoolClient, key: string, req: OutreachRequest, target: Target, now: Date) {
   const channel = pickChannel(target.contact_email, target.contact_phone);
@@ -127,11 +119,21 @@ export async function sendOutreach(
   }
 
   const link = linkFor(token);
+  const language = resolveLanguage(target.contact_language);
+  const message = buildMessage({
+    customer_ref: target.customer_ref,
+    merchant_name: target.merchant_name,
+    amount_paise: Number(target.amount_paise),
+    link,
+  }, language);
+
+  await query(`UPDATE outreach SET language = $2 WHERE idempotency_key = $1`, [key, language]);
+
   const result = await provider.send({
     channel,
     recipient,
-    subject: 'Your subscription payment needs re-authorisation',
-    body: bodyFor(target.customer_ref, Number(target.amount_paise), link),
+    subject: message.subject,
+    body: message.body,
     link,
     subscription_id: req.subscription_id,
   });
