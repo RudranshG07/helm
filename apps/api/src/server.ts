@@ -79,6 +79,7 @@ if (existsSync(webRoot)) {
   app.get('/dashboard', async (_request, reply) => reply.sendFile('dashboard.html'));
   app.get('/onboard', async (_request, reply) => reply.sendFile('onboard.html'));
   app.get('/authorize', async (_request, reply) => reply.sendFile('authorize.html'));
+  app.get('/proof', async (_request, reply) => reply.sendFile('proof.html'));
   app.setNotFoundHandler((request, reply) => {
     if (request.url.startsWith('/api') || request.url.startsWith('/webhooks')) {
       return reply.code(404).send({ error: 'not found' });
@@ -86,6 +87,7 @@ if (existsSync(webRoot)) {
     if (request.url.startsWith('/dashboard')) return reply.sendFile('dashboard.html');
     if (request.url.startsWith('/onboard')) return reply.sendFile('onboard.html');
     if (request.url.startsWith('/authorize')) return reply.sendFile('authorize.html');
+    if (request.url.startsWith('/proof')) return reply.sendFile('proof.html');
     return reply.sendFile('index.html');
   });
 }

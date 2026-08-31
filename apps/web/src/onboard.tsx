@@ -117,6 +117,7 @@ export default function Onboard() {
         <header className="masthead">
         <a className="wordmark" href="/">Helm</a>
         <nav className="site-links" aria-label="Product">
+          <a className="site-link" href="/proof">Proof</a>
           <a className="site-link" href="/authorize">Mandates</a>
           <a className="site-link" href="/dashboard">Dashboard</a>
         </nav>
@@ -131,6 +132,7 @@ export default function Onboard() {
       <header className="masthead">
         <a className="wordmark" href="/">Helm</a>
         <nav className="site-links" aria-label="Product">
+          <a className="site-link" href="/proof">Proof</a>
           <a className="site-link" href="/authorize">Mandates</a>
           <a className="site-link" href="/dashboard">Dashboard</a>
         </nav>

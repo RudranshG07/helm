@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { buildDecisionTrace } from '@mandate/worker/trace/decision';
+import { buildProof } from '@mandate/worker/proof/build';
 import {
   atRisk,
   decisionLog,
@@ -30,6 +31,8 @@ export function registerDashboardRoutes(app: FastifyInstance): void {
     distribution: await declineDistribution(),
     unmapped: await unmappedCodes(),
   }));
+
+  app.get('/api/proof', async () => buildProof());
 
   app.get<{ Params: { id: string } }>('/api/decisions/:id/trace', async (request, reply) => {
     if (!/^\d+$/.test(request.params.id)) {

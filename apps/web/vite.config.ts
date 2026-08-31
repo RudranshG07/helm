@@ -13,6 +13,7 @@ export default defineConfig({
         dashboard: resolve(import.meta.dirname, 'dashboard.html'),
         onboard: resolve(import.meta.dirname, 'onboard.html'),
         authorize: resolve(import.meta.dirname, 'authorize.html'),
+        proof: resolve(import.meta.dirname, 'proof.html'),
       },
     },
   },

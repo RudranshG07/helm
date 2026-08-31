@@ -87,7 +87,7 @@ describe('a customer can tell us when they will have the money', () => {
 describe('a promise is settled by what actually happened', () => {
   it('marks it kept when a charge succeeded after it was made', async () => {
     await recordPromise({ subscription_id: S, outreach_id: null, promised_for: day(2), now: NOW });
-    await attempt('captured', new Date());
+    await attempt('captured', new Date(Date.now() + 5_000));
     const r = await resolvePromises(new Date());
     expect(r.kept).toBe(1);
   });
@@ -98,21 +98,21 @@ describe('a promise is settled by what actually happened', () => {
        VALUES ($1,$2,$3,49900,'open','customer')`,
       [S, CYCLE, '2026-08-27'],
     );
-    await attempt('failed', new Date());
+    await attempt('failed', new Date(Date.now() + 5_000));
     const r = await resolvePromises(new Date());
     expect(r.broken).toBe(1);
   });
 
   it('leaves a promise open while its date is still ahead', async () => {
     await recordPromise({ subscription_id: S, outreach_id: null, promised_for: day(10), now: NOW });
-    await attempt('failed', new Date());
+    await attempt('failed', new Date(Date.now() + 5_000));
     const r = await resolvePromises(new Date());
     expect(r.kept + r.broken).toBe(0);
     expect(await openPromiseFor(S, CYCLE)).not.toBeNull();
   });
 
   it('never counts a charge that happened before the promise was made', async () => {
-    await attempt('captured', new Date(Date.now() - 60_000));
+    await attempt('captured', new Date(Date.now() - 600_000));
     await recordPromise({ subscription_id: S, outreach_id: null, promised_for: day(2), now: NOW });
     const r = await resolvePromises(new Date());
     expect(r.kept).toBe(0);
@@ -120,7 +120,7 @@ describe('a promise is settled by what actually happened', () => {
 
   it('builds a reliability record the next cycle can use', async () => {
     await recordPromise({ subscription_id: S, outreach_id: null, promised_for: day(2), now: NOW });
-    await attempt('captured', new Date());
+    await attempt('captured', new Date(Date.now() + 5_000));
     await resolvePromises(new Date());
     const rel = await reliabilityFor(S);
     expect(rel.kept).toBe(1);
