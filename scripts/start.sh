@@ -37,6 +37,7 @@ trap cleanup EXIT INT TERM
 echo "→ api on http://localhost:${PORT}"
 echo
 echo "   landing    http://localhost:${PORT}/"
+echo "   the proof  http://localhost:${PORT}/proof"
 echo "   connect    http://localhost:${PORT}/onboard"
 echo "   mandates   http://localhost:${PORT}/authorize"
 echo "   dashboard  http://localhost:${PORT}/dashboard"
