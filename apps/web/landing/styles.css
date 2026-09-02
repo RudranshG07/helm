@@ -52,13 +52,15 @@ button { border: 0; font: inherit; }
 
 .site-header {
   z-index: 10; top: 0; left: 0; right: 0;
-  display: flex; flex-wrap: wrap;
-  align-items: center; justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+  align-items: center; justify-items: center;
   gap: clamp(12px, 2vw, 28px); padding: clamp(18px, 2.6vw, 32px);
   color: var(--paper-faint); pointer-events: auto;
 }
 
 .site-logo {
+  grid-column: 1;
   justify-self: start;
   font-family: var(--display);
   font-size: 24px; font-weight: 400; line-height: 1;
@@ -67,7 +69,8 @@ button { border: 0; font: inherit; }
 }
 
 .site-nav {
-  display: flex; align-items: center; justify-content: flex-end;
+  grid-column: 2;
+  display: flex; align-items: center; justify-content: center;
   flex-wrap: wrap;
   gap: clamp(14px, 1.8vw, 30px);
   min-width: 0;
@@ -195,10 +198,11 @@ button { border: 0; font: inherit; }
 }
 
 .hero-title {
-  z-index: 3; left: 50%; top: clamp(122px, 19vh, 205px);
+  z-index: 3; left: 50%;
+  top: clamp(90px, min(19vh, calc(95vh - 38.2vw - 60px)), 205px);
   width: min(94vw, 1780px); margin: 0; color: var(--paper);
   font-family: var(--display);
-  font-size: var(--step-wordmark); font-weight: var(--display-weight); line-height: 0.82;
+  font-size: 14rem; font-weight: var(--display-weight); line-height: 0.78;
   text-align: center; text-shadow: none;
   transform: translate3d(-50%, var(--title-y), 0) scale(var(--title-scale));
   opacity: var(--title-opacity); will-change: transform, opacity;
@@ -303,10 +307,13 @@ button { border: 0; font: inherit; }
 .note-button span:first-child { font-size: 1.25rem; line-height: 1; }
 
 @media (max-width: 1500px) {
+  .hero-title { font-size: 11rem; }
+  .story-panel h2 { font-size: 4.1rem; }
 }
 
 @media (max-width: 1100px) {
-  .hero-title { top: 15vh; }
+  .hero-title { top: 15vh; font-size: 7.5rem; }
+  .story-panel h2 { font-size: 3.2rem; }
   .bridge-img { width: 138vw; }
   .frame-two-img { width: 132vw; }
   .facts { gap: 34px; margin-top: 44px; }
@@ -318,7 +325,7 @@ button { border: 0; font: inherit; }
   .site-nav { width: 100%; justify-content: flex-start;
               gap: 16px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
   .site-nav::-webkit-scrollbar { display: none; }
-  .hero-title { top: 16vh; }
+  .hero-title { top: 16vh; font-size: 4.5rem; }
   .bridge-img { bottom: 2vh; width: 190vw; }
   .frame-two-img { width: 176vw; }
   .intro-copy { bottom: 42px; }

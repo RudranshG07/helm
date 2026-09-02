@@ -50,7 +50,6 @@
   --display-leading: 0.95;
   --display-tracking: -0.005em;
 
-  --step-wordmark: clamp(4.5rem, 22vw, 14rem);
   --step-hero: clamp(2.6rem, 7vw, 4.75rem);
   --step-xl: clamp(2rem, 5vw, 3.2rem);
   --step-lg: clamp(1.6rem, 3.6vw, 2.3rem);

@@ -137,7 +137,7 @@ describe('the marketing page and the product share one design system', () => {
 
   it('scales display type fluidly rather than at a few breakpoints', () => {
     expect(tokens).toMatch(/--step-hero:\s*clamp\(/);
-    expect(tokens).toMatch(/--step-wordmark:\s*clamp\(/);
+    expect(tokens).toMatch(/--step-xl:\s*clamp\(/);
   });
 });
 
@@ -173,13 +173,26 @@ describe('the landing page works without the scroll choreography', () => {
 
   it('reserves no space for controls that were removed', () => {
     expect(landing).not.toContain('language-switcher');
-    expect(landing).not.toMatch(/\.site-header \{[^}]*grid-template-columns/);
-  });
-
-  it('lets the header wrap rather than clip its own call to action', () => {
     const header = /\.site-header \{([^}]*)\}/.exec(landing);
     expect(header, 'no .site-header rule').not.toBeNull();
-    expect(header![1]).toContain('flex-wrap: wrap');
+    const fixedSideColumns = /minmax\(\s*\d+px/.exec(header![1]!);
+    expect(fixedSideColumns, 'a fixed side column squeezes the nav until it clips').toBeNull();
+  });
+
+  it('lets the navigation wrap rather than clip its own call to action', () => {
+    const nav = /\.site-nav \{([^}]*)\}/.exec(landing);
+    expect(nav, 'no .site-nav rule').not.toBeNull();
+    expect(nav![1]).toContain('flex-wrap: wrap');
+    expect(nav![1]).toContain('min-width: 0');
+  });
+
+  it('leaves the scroll choreography untouched', () => {
+    const bridge = /\.bridge-img \{([^}]*)\}/.exec(landing);
+    expect(bridge, 'no .bridge-img rule').not.toBeNull();
+    expect(bridge![1], 'the bridge is animated by width and scale; a height cap clamps it')
+      .not.toMatch(/max-height/);
+    expect(bridge![1]).toContain('var(--bridge-width)');
+    expect(bridge![1]).toContain('var(--bridge-scale)');
   });
 
   it('offers every destination from the top of the landing page', () => {
@@ -187,6 +200,62 @@ describe('the landing page works without the scroll choreography', () => {
     expect(nav, 'no site nav').not.toBeNull();
     for (const route of ['/proof', '/docs', '/dashboard', '/onboard']) {
       expect(nav![1], route).toContain(`href="${route}"`);
+    }
+  });
+
+  it('keeps the wordmark tucked behind the bridge, as the scene intends', () => {
+    const zOf = (selector: string) => {
+      const rule = new RegExp(`\\${selector} \\{([^}]*)\\}`).exec(landing);
+      expect(rule, `${selector} has no rule`).not.toBeNull();
+      const z = /z-index:\s*(\d+)/.exec(rule![1]!);
+      expect(z, `${selector} has no z-index`).not.toBeNull();
+      return Number(z![1]);
+    };
+    expect(zOf('.hero-title')).toBeLessThan(zOf('.bridge-img'));
+  });
+
+  it('never lets the bridge swallow the wordmark completely', () => {
+    const rule = /\.hero-title \{([^}]*)\}/.exec(landing);
+    expect(rule, 'no .hero-title rule').not.toBeNull();
+    const top = /top:\s*([^;]+);/.exec(rule![1]!);
+    expect(top, 'hero title has no top').not.toBeNull();
+    expect(top![1], 'the title must rise when the bridge grows tall on a short viewport')
+      .toMatch(/95vh\s*-\s*38\.2vw/);
+
+    const ASPECT = 2200 / 1237;
+    const visible = (vw: number, vh: number, fontRem: number) => {
+      const w = Math.min(0.672 * vw, 2140);
+      const h = w / ASPECT;
+      const bridgeTop = vh - 0.05 * vh - h - h * 0.02 * 0.48;
+      const inner = Math.min(0.19 * vh, 0.95 * vh - 0.382 * vw - 60);
+      const titleTop = Math.max(90, Math.min(inner, 205));
+      return Math.min(bridgeTop, titleTop + fontRem * 16 * 0.78) - titleTop;
+    };
+
+    const ratios: [number, number, number][] = [
+      [1440, 900, 11], [1440, 700, 11], [1366, 768, 11], [1280, 800, 11],
+      [1920, 1080, 14], [1920, 900, 14], [2560, 1440, 14], [1024, 768, 7.5], [390, 844, 4.5],
+    ];
+    for (const [vw, vh, font] of ratios) {
+      expect(visible(vw, vh, font), `${vw}x${vh} hides the wordmark`).toBeGreaterThan(20);
+    }
+  });
+
+  it('centres the primary navigation without reserving fixed side columns', () => {
+    const header = /\.site-header \{([^}]*)\}/.exec(landing);
+    expect(header![1]).toContain('justify-items: center');
+    expect(header![1]).not.toMatch(/minmax\(2\d\dpx/);
+  });
+
+  it('never lists the same destination twice in one navigation', () => {
+    for (const [name, re_] of [
+      ['header', /<nav class="site-nav"[\s\S]*?<\/nav>/],
+      ['footer', /<nav aria-label="Footer">[\s\S]*?<\/nav>/],
+    ] as const) {
+      const block = re_.exec(html);
+      expect(block, `${name} nav missing`).not.toBeNull();
+      const hrefs = [...block![0].matchAll(/href="([^"]+)"/g)].map((m) => m[1]!);
+      expect(new Set(hrefs).size, `${name} has a duplicate link`).toBe(hrefs.length);
     }
   });
 
