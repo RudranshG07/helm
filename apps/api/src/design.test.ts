@@ -171,6 +171,25 @@ describe('the landing page works without the scroll choreography', () => {
     expect(html).toMatch(/[Ss]ixteen/);
   });
 
+  it('reserves no space for controls that were removed', () => {
+    expect(landing).not.toContain('language-switcher');
+    expect(landing).not.toMatch(/\.site-header \{[^}]*grid-template-columns/);
+  });
+
+  it('lets the header wrap rather than clip its own call to action', () => {
+    const header = /\.site-header \{([^}]*)\}/.exec(landing);
+    expect(header, 'no .site-header rule').not.toBeNull();
+    expect(header![1]).toContain('flex-wrap: wrap');
+  });
+
+  it('offers every destination from the top of the landing page', () => {
+    const nav = /<nav class="site-nav"[^>]*>([\s\S]*?)<\/nav>/.exec(html);
+    expect(nav, 'no site nav').not.toBeNull();
+    for (const route of ['/proof', '/docs', '/dashboard', '/onboard']) {
+      expect(nav![1], route).toContain(`href="${route}"`);
+    }
+  });
+
   it('gives narrow screens a layout instead of a broken wide one', () => {
     expect(landing).toMatch(/@media \(max-width: 860px\)/);
     expect(landing).toContain('.ground-actions { flex-direction: column');

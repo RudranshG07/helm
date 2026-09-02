@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Helm</title>
-  <meta name="description" content="An agent that saves subscriptions before they halt." />
+  <meta name="description" content="Helm decides how to spend a failing mandate's four attempts, and when to stop retrying and ask the customer to authorise again." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" />
@@ -25,7 +25,8 @@
               <a href="#detect">Detect</a>
               <a href="#decide">Decide</a>
               <a href="#prove">Prove</a>
-              <a href="/proof">The proof</a>
+              <a href="/proof">Proof</a>
+              <a href="/docs">Docs</a>
               <a href="/dashboard">Dashboard</a>
               <a class="site-nav-cta" href="/onboard">Get started</a>
             </nav>
@@ -40,19 +41,19 @@
                   <span class="sight-kicker">Detect</span>
                   <img class="sight-pin" alt="" src="img/1fbbb2933f1e.webp" loading="lazy" decoding="async" />
                   <h3>Revenue at risk</h3>
-                  <p>Mandates scored the moment a charge fails, and nightly before one does.</p>
+                  <p>Every mandate scored the moment a charge fails, and nightly before one does.</p>
                 </article>
                 <article class="sight-card" tabindex="0" role="button" aria-label="Open Decline taxonomy card">
                   <span class="sight-kicker">Classify</span>
                   <img class="sight-pin" alt="" src="img/f9b3de4cb836.webp" loading="lazy" decoding="async" />
                   <h3>Decline taxonomy</h3>
-                  <p>Soft, hard, or unmapped. A revoked mandate never gets a retry.</p>
+                  <p>Under water, demolished, or unrecognised. A demolished bridge never gets a retry.</p>
                 </article>
                 <article class="sight-card" tabindex="0" role="button" aria-label="Open Liquidity window card">
                   <span class="sight-kicker">Time</span>
                   <img class="sight-pin" alt="" src="img/cc430f6929d1.webp" loading="lazy" decoding="async" />
                   <h3>Liquidity window</h3>
-                  <p>Retries land when the account is likely funded, not on a fixed clock.</p>
+                  <p>Cross when the account is funded and the gate is clear, not on a fixed clock.</p>
                 </article>
                 <article class="sight-card" tabindex="0" role="button" aria-label="Open Policy engine card">
                   <span class="sight-kicker">Bound</span>
@@ -88,7 +89,7 @@
         </div>
 
         <section class="intro-copy" aria-label="Helm overview">
-          <p>A failed mandate has days to live. Helm decides which attempts to spend, when, and when to stop retrying and start over.</p>
+          <p>A failed mandate has four crossings and a handful of days. Helm decides which to spend, when to spend them, and when to stop retrying and rebuild instead.</p>
           <div class="hero-tags" aria-label="Helm highlights">
             <span>Razorpay</span>
             <span>UPI Autopay</span>
@@ -97,23 +98,23 @@
         </section>
 
         <section class="story-panel story-panel-bridge" aria-label="Detection details">
-          <h2>The retry is the whole product.</h2>
-          <p>The default schedule spends the same attempts on a customer who was short for a day and one who revoked the mandate. Helm spends them on evidence.</p>
+          <h2>A mandate is a bridge. It gets four crossings.</h2>
+          <p>Every failed charge spends one. The default schedule spends all four the same way, whether the customer was short for a single morning or tore the bridge down themselves.</p>
           <dl class="facts">
             <div>
               <dt>4</dt>
-              <dd>Attempts before the mandate is gone</dd>
+              <dd>Crossings before the bridge comes down for good</dd>
             </div>
             <div>
               <dt>24h</dt>
-              <dd>Minimum notice before any debit</dd>
+              <dd>Notice owed to the customer before any debit</dd>
             </div>
           </dl>
         </section>
 
         <section class="story-panel story-panel-bazaar" aria-label="Policy details">
-          <h2>Bounded, or it does not run.</h2>
-          <p>Every money action is checked against sixteen deterministic rules before it executes, and refusals are logged as loudly as approvals.</p>
+          <h2>On payday, every merchant crowds the same gate.</h2>
+          <p>Helm times its crossing for when the account is actually funded and the gate is clear, then checks the attempt against sixteen deterministic rules. Refusals are logged as loudly as approvals.</p>
           <div class="note-actions">
             <a class="note-button note-button-primary" href="/proof">
               <span aria-hidden="true">&#8599;</span>
@@ -135,36 +136,38 @@
     <div class="ground">
       <section class="ground-section" id="detect" aria-labelledby="detect-h">
         <span class="ground-kicker">Detect</span>
-        <h2 id="detect-h">A mandate tells you it is dying before it dies.</h2>
+        <h2 id="detect-h">A bridge that is out tells you before it comes down.</h2>
         <p class="ground-lede">
-          India gives a failed mandate one original attempt and three retries. After that the
-          bank cancels it and the customer has to authorise all over again. Helm scores every
-          mandate the moment a charge fails, and again nightly before one does, so the window is
-          visible while it is still open.
+          A mandate is the standing permission that lets a merchant take money from a customer's
+          account. India gives a failing one four crossings: the original charge and three
+          retries. Miss all four and the bank tears it down, and the customer has to build it
+          again from nothing. Helm scores every mandate the moment a charge fails, and again
+          nightly before one does, so the gap is visible while it can still be closed.
         </p>
         <dl class="ground-facts">
           <div>
             <dt>4</dt>
-            <dd>Attempts before the mandate is gone for good</dd>
+            <dd>Crossings before the bank tears the bridge down</dd>
           </div>
           <div>
             <dt>24h</dt>
-            <dd>Minimum notice the rules require before any debit</dd>
+            <dd>Notice the rules require before any debit is taken</dd>
           </div>
           <div>
             <dt>5</dt>
-            <dd>Decline buckets, and an unmapped code is never guessed into one</dd>
+            <dd>Decline buckets, and a code we have not seen is never guessed into one</dd>
           </div>
         </dl>
       </section>
 
       <section class="ground-section" id="decide" aria-labelledby="decide-h">
         <span class="ground-kicker">Decide</span>
-        <h2 id="decide-h">Helm cannot add attempts. It decides how to spend them.</h2>
+        <h2 id="decide-h">Helm cannot add crossings. It decides when to take them.</h2>
         <p class="ground-lede">
-          The default schedule spends the same three retries on a customer who was short for one
-          day and on one who revoked the mandate entirely. Helm reads the decline code, works out
-          when that account is likely funded, and refuses to spend an attempt that cannot succeed.
+          A bridge that is under water for a morning is not the same as one that has been
+          demolished, and spending your last crossing on the demolished one is how merchants lose
+          customers they could have kept. Helm reads the decline, works out when that account is
+          actually funded, and refuses attempts that cannot succeed.
         </p>
         <ul class="ground-list">
           <li>
@@ -173,14 +176,15 @@
             re-authorise.
           </li>
           <li>
-            <strong>Time it against evidence.</strong>
-            Retries land when that customer's account has historically been funded, not on a
-            fixed clock, and never inside a contested bank window.
+            <strong>Cross when the gate is clear.</strong>
+            On the first of the month every merchant in the country debits at once. Retries land
+            when that customer's account has historically been funded, and never inside the
+            windows where the whole market is queueing.
           </li>
           <li>
-            <strong>Ask, when no retry can work.</strong>
-            The customer gets a link to re-authorise, in their own language, and can name the
-            date they will have the money instead of failing again.
+            <strong>Rebuild, when no crossing can work.</strong>
+            If the bridge is gone the customer gets a link to authorise a new one, in their own
+            language, and can name the date they will have the money instead of failing again.
           </li>
         </ul>
       </section>
@@ -209,7 +213,8 @@
           <a href="#detect">Detect</a>
           <a href="#decide">Decide</a>
           <a href="#prove">Prove</a>
-          <a href="/proof">The proof</a>
+          <a href="/proof">Proof</a>
+              <a href="/docs">Docs</a>
           <a href="/docs">Docs</a>
           <a href="/dashboard">Dashboard</a>
         </nav>
