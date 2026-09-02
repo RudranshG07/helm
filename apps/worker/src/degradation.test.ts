@@ -78,7 +78,9 @@ describe('the rollup only fires on evidence', () => {
     await rollupDegradation(MERCHANT);
     expect(await rollupDegradation(MERCHANT)).toBe(0);
 
-    const { rows } = await query(`SELECT id FROM degradation_signal WHERE source = 'internal_rollup'`);
+    const { rows } = await query(
+      `SELECT id FROM degradation_signal
+        WHERE source = 'internal_rollup' AND issuer = 'HDFC' AND method = 'upi_autopay'`);
     expect(rows).toHaveLength(1);
   });
 
