@@ -1,10 +1,4 @@
-@font-face {
-  font-family: "Ogg Medium";
-  src: url("https://dcym8fthxf5uu.cloudfront.net/fonts/247a073c-29f5-4a89-aa3a-741020f346fc/OggText-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
+@import url("tokens.css");
 
 :root {
   --mx: 0; --my: 0;
@@ -30,8 +24,8 @@
   --sights-shift: 0px; --sights-scale: 1;
   --sights-top: clamp(112px, 19vh, 220px);
   --sights-screen-top: clamp(112px, 19vh, 220px);
-  --ink: #111411; --paper: #fdf1e1; --shadow: rgba(0, 0, 0, 0.32);
-  font-family: Inter, Satoshi, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  
+  font-family: var(--sans);
   color: var(--paper);
   background: #0b1110;
   letter-spacing: 0;
@@ -65,8 +59,8 @@ button { border: 0; font: inherit; }
 
 .site-logo {
   justify-self: start;
-  font-family: "Ogg Medium", "Instrument Serif", Georgia, serif;
-  font-size: 24px; font-weight: 500; line-height: 1;
+  font-family: var(--display);
+  font-size: 24px; font-weight: 400; line-height: 1;
   color: rgba(253, 241, 225, 0.92);
   text-decoration: none; white-space: nowrap;
 }
@@ -157,7 +151,7 @@ button { border: 0; font: inherit; }
 
 .sight-kicker {
   display: block; margin-bottom: 56px; color: #000;
-  font-size: 12px; font-weight: 500; line-height: 1.05; text-transform: uppercase;
+  font-size: 12px; font-weight: 400; line-height: 1.05; text-transform: uppercase;
   text-shadow: none; position: relative; z-index: 1;
 }
 
@@ -201,8 +195,8 @@ button { border: 0; font: inherit; }
 .hero-title {
   z-index: 3; left: 50%; top: clamp(122px, 19vh, 205px);
   width: min(94vw, 1780px); margin: 0; color: #fdf1e1;
-  font-family: "Ogg Medium", "Instrument Serif", Georgia, serif;
-  font-size: 14rem; font-weight: 500; line-height: 0.78;
+  font-family: var(--display);
+  font-size: 14rem; font-weight: 400; line-height: 0.78;
   text-align: center; text-shadow: none;
   transform: translate3d(-50%, var(--title-y), 0) scale(var(--title-scale));
   opacity: var(--title-opacity); will-change: transform, opacity;
@@ -252,14 +246,14 @@ button { border: 0; font: inherit; }
 }
 .intro-copy p {
   margin: 0 auto; max-width: 560px; color: #fdf1e1;
-  font-size: 1.18rem; font-weight: 500; line-height: 1.18;
+  font-size: 1.18rem; font-weight: 400; line-height: 1.18;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.42);
 }
 .hero-tags { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin-top: 26px; }
 .hero-tags span {
   min-height: 42px; display: inline-flex; align-items: center; justify-content: center;
   padding: 0 25px; color: var(--ink); border-radius: 999px; background: #fdf1e1;
-  font-size: 0.98rem; font-weight: 500; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+  font-size: 0.98rem; font-weight: 400; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
 }
 
 .story-panel {
@@ -269,13 +263,13 @@ button { border: 0; font: inherit; }
 }
 .story-panel h2 {
   margin: 0; color: #fdf1e1;
-  font-family: "Ogg Medium", "Instrument Serif", Georgia, serif;
-  font-size: 4.75rem; font-weight: 500; line-height: 0.95;
+  font-family: var(--display);
+  font-size: 4.75rem; font-weight: 400; line-height: 0.95;
   text-shadow: 0 16px 38px var(--shadow);
 }
 .story-panel p {
   width: min(520px, 100%); margin: 26px auto 0; color: #fdf1e1;
-  font-size: 1.14rem; font-weight: 500; line-height: 1.18;
+  font-size: 1.14rem; font-weight: 400; line-height: 1.18;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.42);
 }
 .story-panel-bridge { top: 60%; opacity: var(--panel2-opacity); transform: translate3d(-50%, var(--panel2-y), 0); }
@@ -286,13 +280,13 @@ button { border: 0; font: inherit; }
   gap: 86px; width: min(470px, 100%); margin: 72px auto 0;
 }
 .facts dt {
-  color: #fdf1e1; font-family: "Ogg Medium", "Instrument Serif", Georgia, serif;
-  font-size: 4.2rem; font-weight: 500; line-height: 0.9;
+  color: #fdf1e1; font-family: var(--display);
+  font-size: 4.2rem; font-weight: 400; line-height: 0.9;
   text-shadow: 0 14px 34px var(--shadow);
 }
 .facts dd {
   margin: 18px 0 0; color: #fdf1e1;
-  font-size: 1rem; font-weight: 500; line-height: 1.14;
+  font-size: 1rem; font-weight: 400; line-height: 1.14;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.42);
 }
 
