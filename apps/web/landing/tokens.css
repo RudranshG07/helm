@@ -2,9 +2,10 @@
   --paper: #fdf1e1;
   --paper-dim: #efe2d0;
   --paper-faint: rgba(253, 241, 225, 0.62);
+  --paper-hint: rgba(253, 241, 225, 0.55);
   --ink: #111411;
   --ink-soft: #4d514c;
-  --ink-faint: #7d817a;
+  --ink-faint: #6a6e68;
 
   --deep: #0b1110;
   --deep-raised: #14201f;
@@ -12,9 +13,9 @@
   --sky-deep: #1d5f7e;
 
   --critical: #c0392b;
-  --warn: #b26b12;
-  --good: #2f7d5b;
-  --unknown: #6b7280;
+  --warn: #9d5e10;
+  --good: #2e7a59;
+  --unknown: #676d7b;
 
   --line: rgba(17, 20, 17, 0.12);
   --line-strong: rgba(17, 20, 17, 0.22);
