@@ -7,6 +7,7 @@ import { runOnboardingJobs } from './onboarding.ts';
 import { dispatchDue, dispatchOutreach } from './dispatch.ts';
 import { makeOutreachProvider } from './outreach/provider.ts';
 import { resolvePromises } from './promise.ts';
+import { deconflictScheduled } from './deconflict/live.ts';
 import { reconcileStuck } from './executor.ts';
 import { makeGateway } from './gateway-factory.ts';
 import { ingestBatch } from './ingest.ts';
@@ -34,6 +35,11 @@ async function tick(): Promise<void> {
   const decided = await decideBatch(agent);
   if (decided > 0) {
     log.info('decide.batch', { decided });
+  }
+
+  const spread = await deconflictScheduled();
+  if (spread.moved > 0) {
+    log.info('deconflict.batch', { ...spread });
   }
 
   const dispatched = await dispatchDue(gateway);

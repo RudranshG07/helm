@@ -5,6 +5,9 @@ import type { ArmTotals } from '../arms.ts';
 import { buildDecisionTrace } from '../trace/decision.ts';
 import type { DecisionTrace } from '../trace/decision.ts';
 import { SCENARIOS } from '../adversarial/catalog.ts';
+import { findCollisions } from '@mandate/core';
+import type { ScheduledDebit } from '@mandate/core';
+import { analyzeContention } from '../contention/analyze.ts';
 
 export interface ProofScale {
   merchants: number;
@@ -36,6 +39,18 @@ export interface ProofOutreach {
   promises_broken: number;
 }
 
+export interface CrossMerchant {
+  merchants_sharing_signals: number;
+  customers_seen_by_more_than_one: number;
+  debits_spread: number;
+  collisions_pending: number;
+  contention_verdict: string;
+  contention_explanation: string;
+  contention_threshold_paise: number;
+  contested_label: string;
+  uncontested_label: string;
+}
+
 export interface Proof {
   generated_at: string;
   scale: ProofScale;
@@ -44,6 +59,7 @@ export interface Proof {
   allowed_trace: DecisionTrace | null;
   refused_trace: DecisionTrace | null;
   outreach: ProofOutreach;
+  cross_merchant: CrossMerchant;
   honesty: ProofHonesty;
 }
 
@@ -114,6 +130,37 @@ export async function buildProof(): Promise<Proof> {
            count(*)::text AS total
       FROM payment_attempt WHERE status = 'failed'`);
 
+  const shared = await one<Record<string, string>>(`
+    SELECT (SELECT count(*) FROM merchant WHERE cross_merchant_signals)::text AS merchants,
+           (SELECT count(*) FROM (
+              SELECT COALESCE(customer_key, customer_ref) AS ck
+                FROM subscription
+               GROUP BY 1 HAVING count(DISTINCT merchant_id) > 1
+            ) q)::text AS shared_customers,
+           (SELECT count(*) FROM decision
+             WHERE explanation LIKE '%same-account collision%')::text AS spread`);
+
+  const { rows: pending } = await query<{
+    id: string; merchant_id: string; customer_key: string; amount_paise: string; scheduled_for: Date;
+  }>(`
+    SELECT d.id::text AS id, s.merchant_id,
+           COALESCE(s.customer_key, s.customer_ref) AS customer_key,
+           s.amount_paise::text AS amount_paise, d.scheduled_for
+      FROM decision d
+      JOIN subscription s ON s.id = d.subscription_id
+      JOIN merchant m ON m.id = s.merchant_id
+     WHERE d.verdict = 'ALLOW' AND d.proposed_action = 'RETRY_SCHEDULED'
+       AND d.executed_at IS NULL AND d.outcome IS NULL
+       AND d.scheduled_for IS NOT NULL AND m.cross_merchant_signals`);
+
+  const debits: ScheduledDebit[] = pending.map((r) => ({
+    id: r.id, merchant_id: r.merchant_id, customer_key: r.customer_key,
+    amount_paise: Number(r.amount_paise), at: r.scheduled_for,
+    earliest: r.scheduled_for, latest: r.scheduled_for,
+  }));
+
+  const contention = await analyzeContention();
+
   const gaps = SCENARIOS.filter((s) => s.outcome === 'UNHANDLED');
   const total = Number(unmapped?.total ?? 0);
 
@@ -138,6 +185,17 @@ export async function buildProof(): Promise<Proof> {
       promises_open: Number(promises?.['open'] ?? 0),
       promises_kept: Number(promises?.['kept'] ?? 0),
       promises_broken: Number(promises?.['broken'] ?? 0),
+    },
+    cross_merchant: {
+      merchants_sharing_signals: Number(shared?.['merchants'] ?? 0),
+      customers_seen_by_more_than_one: Number(shared?.['shared_customers'] ?? 0),
+      debits_spread: Number(shared?.['spread'] ?? 0),
+      collisions_pending: findCollisions(debits).length,
+      contention_verdict: contention.test.verdict,
+      contention_explanation: contention.test.explanation,
+      contention_threshold_paise: contention.test.threshold_paise,
+      contested_label: contention.contested_label,
+      uncontested_label: contention.uncontested_label,
     },
     honesty: {
       taxonomy_version: TAXONOMY_VERSION,

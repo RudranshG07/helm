@@ -12,6 +12,18 @@ interface ArmRow {
   mandates_halted: number;
 }
 
+interface CrossMerchant {
+  merchants_sharing_signals: number;
+  customers_seen_by_more_than_one: number;
+  debits_spread: number;
+  collisions_pending: number;
+  contention_verdict: string;
+  contention_explanation: string;
+  contention_threshold_paise: number;
+  contested_label: string;
+  uncontested_label: string;
+}
+
 interface ProofData {
   generated_at: string;
   scale: Record<string, number>;
@@ -26,6 +38,7 @@ interface ProofData {
     promises_kept: number;
     promises_broken: number;
   };
+  cross_merchant: CrossMerchant;
   honesty: {
     taxonomy_version: string;
     unmapped_attempts: number;
@@ -144,6 +157,7 @@ export default function Proof() {
   const treatment = data.arms.find((a) => a.arm === 'treatment');
   const h = data.honesty;
   const o = data.outreach;
+  const x = data.cross_merchant;
 
   return (
     <div className="shell proof">
@@ -300,6 +314,48 @@ export default function Proof() {
 
       <Section
         n={5}
+        eyebrow="Only possible across merchants"
+        title="Two merchants should not fight over the same account on the same morning."
+        lede="One merchant cannot see this. Helm sees every consenting merchant's schedule at once, so when several would debit the same customer within half an hour it spreads them instead of letting them knock each other out."
+      >
+        <div className="tiles">
+          <div className="tile paper">
+            <span className="eyebrow">Merchants sharing signals</span>
+            <strong className="num">{x.merchants_sharing_signals}</strong>
+            <span className="hint">{x.customers_seen_by_more_than_one} customers seen by more than one</span>
+          </div>
+          <div className="tile paper">
+            <span className="eyebrow">Debits spread apart</span>
+            <strong className="num">{x.debits_spread}</strong>
+            <span className="hint">each carries the reason on its own decision</span>
+          </div>
+          <div className="tile paper">
+            <span className="eyebrow">Collisions still pending</span>
+            <strong className="num">{x.collisions_pending}</strong>
+            <span className="hint">checked live against everything scheduled</span>
+          </div>
+        </div>
+
+        <div className="report-block paper" style={{ marginTop: 18 }}>
+          <h3>The claim underneath it, and how it could be proved wrong</h3>
+          <p style={{ margin: '0 0 14px', color: 'var(--ink-soft)', lineHeight: 1.55 }}>
+            If a failed debit is purely about an empty account, small and large amounts should fail
+            at the same rate whenever the account is short. If it is partly a queue, large debits
+            should fail disproportionately in the contested window and not outside it. Helm runs
+            that comparison on its own data and reports the answer even when the answer is no.
+          </p>
+          <dl className="report-rows">
+            <div><dt>Contested window</dt><dd>{x.contested_label}</dd></div>
+            <div><dt>Compared against</dt><dd>{x.uncontested_label}</dd></div>
+            <div><dt>Large-debit threshold</dt><dd>{rupees(x.contention_threshold_paise)}</dd></div>
+            <div><dt>Verdict</dt><dd>{x.contention_verdict.replace(/_/g, ' ')}</dd></div>
+          </dl>
+          <p className="report-caveat" style={{ marginTop: 14 }}>{x.contention_explanation}</p>
+        </div>
+      </Section>
+
+      <Section
+        n={6}
         eyebrow="What we do not know"
         title="The honesty metrics"
         lede="Anything that would flatter the numbers is reported here instead."
