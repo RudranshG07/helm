@@ -22,17 +22,13 @@
           <header class="site-header" aria-label="Primary navigation">
             <a class="site-logo" href="#cinema">Helm</a>
             <nav class="site-nav" aria-label="Main menu">
-              <a href="#cinema">Intro</a>
-              <a href="#bridge">Detect</a>
-              <a href="#bazaar">Decide</a>
+              <a href="#detect">Detect</a>
+              <a href="#decide">Decide</a>
+              <a href="#prove">Prove</a>
               <a href="/proof">The proof</a>
               <a href="/dashboard">Dashboard</a>
               <a class="site-nav-cta" href="/onboard">Get started</a>
             </nav>
-            <button class="language-switcher" aria-label="Change language">
-              <span>EN</span>
-              <span aria-hidden="true">&#8964;</span>
-            </button>
           </header>
 
           <div class="back-stack">
@@ -62,7 +58,7 @@
                   <span class="sight-kicker">Bound</span>
                   <img class="sight-pin" alt="" src="img/1fbbb2933f1e.webp" loading="lazy" decoding="async" />
                   <h3>Policy engine</h3>
-                  <p>Fourteen deterministic rules. The model proposes, the engine disposes.</p>
+                  <p>Sixteen deterministic rules. The model proposes, the engine disposes.</p>
                 </article>
                 <article class="sight-card" tabindex="0" role="button" aria-label="Open Audit trail card">
                   <span class="sight-kicker">Prove</span>
@@ -100,7 +96,7 @@
           </div>
         </section>
 
-        <section class="story-panel story-panel-bridge" id="bridge" aria-label="Detection details">
+        <section class="story-panel story-panel-bridge" aria-label="Detection details">
           <h2>The retry is the whole product.</h2>
           <p>The default schedule spends the same attempts on a customer who was short for a day and one who revoked the mandate. Helm spends them on evidence.</p>
           <dl class="facts">
@@ -115,7 +111,7 @@
           </dl>
         </section>
 
-        <section class="story-panel story-panel-bazaar" id="bazaar" aria-label="Policy details">
+        <section class="story-panel story-panel-bazaar" aria-label="Policy details">
           <h2>Bounded, or it does not run.</h2>
           <p>Every money action is checked against sixteen deterministic rules before it executes, and refusals are logged as loudly as approvals.</p>
           <div class="note-actions">
@@ -135,6 +131,90 @@
         </section>
       </div>
     </section>
+
+    <div class="ground">
+      <section class="ground-section" id="detect" aria-labelledby="detect-h">
+        <span class="ground-kicker">Detect</span>
+        <h2 id="detect-h">A mandate tells you it is dying before it dies.</h2>
+        <p class="ground-lede">
+          India gives a failed mandate one original attempt and three retries. After that the
+          bank cancels it and the customer has to authorise all over again. Helm scores every
+          mandate the moment a charge fails, and again nightly before one does, so the window is
+          visible while it is still open.
+        </p>
+        <dl class="ground-facts">
+          <div>
+            <dt>4</dt>
+            <dd>Attempts before the mandate is gone for good</dd>
+          </div>
+          <div>
+            <dt>24h</dt>
+            <dd>Minimum notice the rules require before any debit</dd>
+          </div>
+          <div>
+            <dt>5</dt>
+            <dd>Decline buckets, and an unmapped code is never guessed into one</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="ground-section" id="decide" aria-labelledby="decide-h">
+        <span class="ground-kicker">Decide</span>
+        <h2 id="decide-h">Helm cannot add attempts. It decides how to spend them.</h2>
+        <p class="ground-lede">
+          The default schedule spends the same three retries on a customer who was short for one
+          day and on one who revoked the mandate entirely. Helm reads the decline code, works out
+          when that account is likely funded, and refuses to spend an attempt that cannot succeed.
+        </p>
+        <ul class="ground-list">
+          <li>
+            <strong>Classify first.</strong>
+            Soft, hard, or unmapped. A revoked mandate never gets a retry, it gets a request to
+            re-authorise.
+          </li>
+          <li>
+            <strong>Time it against evidence.</strong>
+            Retries land when that customer's account has historically been funded, not on a
+            fixed clock, and never inside a contested bank window.
+          </li>
+          <li>
+            <strong>Ask, when no retry can work.</strong>
+            The customer gets a link to re-authorise, in their own language, and can name the
+            date they will have the money instead of failing again.
+          </li>
+        </ul>
+      </section>
+
+      <section class="ground-section" id="prove" aria-labelledby="prove-h">
+        <span class="ground-kicker">Prove</span>
+        <h2 id="prove-h">Sixteen rules run after the model, and refusals are logged as loudly as approvals.</h2>
+        <p class="ground-lede">
+          The model proposes an action and a reason. It never moves money. A deterministic policy
+          engine checks every proposal against the attempt budget, the notice period, the
+          execution windows, consent, and the kill switch, and the first refusal wins. Every
+          decision is recorded with the rule that produced it, so any single charge can be
+          defended after the fact.
+        </p>
+        <div class="ground-actions">
+          <a class="ground-button ground-button-primary" href="/proof">See the proof</a>
+          <a class="ground-button" href="/onboard">Connect your Razorpay account</a>
+          <a class="ground-button" href="/dashboard">Open the dashboard</a>
+          <a class="ground-button" href="/docs">Read the documentation</a>
+        </div>
+      </section>
+
+      <footer class="ground-foot">
+        <span>Helm</span>
+        <nav aria-label="Footer">
+          <a href="#detect">Detect</a>
+          <a href="#decide">Decide</a>
+          <a href="#prove">Prove</a>
+          <a href="/proof">The proof</a>
+          <a href="/docs">Docs</a>
+          <a href="/dashboard">Dashboard</a>
+        </nav>
+      </footer>
+    </div>
   </main>
 </body>
 </html>

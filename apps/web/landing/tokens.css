@@ -11,6 +11,11 @@
   --deep-raised: #14201f;
   --sky: #4ab5e0;
   --sky-deep: #1d5f7e;
+  --sky-stage: #7fb4d4;
+  --sky-world: #79b7dd;
+  --critical-on-deep: #ff8f7f;
+  --warn-on-deep: #f0b569;
+  --good-on-deep: #7fd1a8;
 
   --critical: #c0392b;
   --warn: #9d5e10;
@@ -20,6 +25,12 @@
   --line: rgba(17, 20, 17, 0.12);
   --line-strong: rgba(17, 20, 17, 0.22);
   --line-paper: rgba(253, 241, 225, 0.16);
+  --line-paper-strong: rgba(253, 241, 225, 0.45);
+  --surface-paper-05: rgba(253, 241, 225, 0.05);
+  --surface-paper-08: rgba(253, 241, 225, 0.08);
+  --paper-lift: #ffffff;
+  --ink-press: #000000;
+  --field: #ffffff;
 
   --shadow: rgba(0, 0, 0, 0.32);
   --shadow-card: 0 18px 52px rgba(2, 47, 64, 0.12);
@@ -39,6 +50,7 @@
   --display-leading: 0.95;
   --display-tracking: -0.005em;
 
+  --step-wordmark: clamp(4.5rem, 22vw, 14rem);
   --step-hero: clamp(2.6rem, 7vw, 4.75rem);
   --step-xl: clamp(2rem, 5vw, 3.2rem);
   --step-lg: clamp(1.6rem, 3.6vw, 2.3rem);

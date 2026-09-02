@@ -117,4 +117,62 @@ describe('the marketing page and the product share one design system', () => {
   it('keeps the product reachable on a phone', () => {
     expect(dashboard).not.toMatch(/\.site-links\s*\{\s*display:\s*none/);
   });
+
+  it('defines every colour once, in the token file', () => {
+    for (const [name, css] of [['landing', landing], ['dashboard', dashboard]] as const) {
+      const literals = css.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
+      expect(literals, `${name} should use tokens, found ${literals.join(', ')}`).toHaveLength(0);
+    }
+  });
+
+  it('leaves no variable undefined', () => {
+    const defined = new Set([...tokens.matchAll(/--([a-z0-9-]+)\s*:/g)].map((m) => m[1]!));
+    for (const [name, css] of [['landing', landing], ['dashboard', dashboard]] as const) {
+      const local = new Set([...css.matchAll(/--([a-z0-9-]+)\s*:/g)].map((m) => m[1]!));
+      const used = new Set([...css.matchAll(/var\(--([a-z0-9-]+)/g)].map((m) => m[1]!));
+      const missing = [...used].filter((v) => !defined.has(v) && !local.has(v));
+      expect(missing, `${name} uses undefined ${missing.join(', ')}`).toHaveLength(0);
+    }
+  });
+
+  it('scales display type fluidly rather than at a few breakpoints', () => {
+    expect(tokens).toMatch(/--step-hero:\s*clamp\(/);
+    expect(tokens).toMatch(/--step-wordmark:\s*clamp\(/);
+  });
+});
+
+describe('the landing page works without the scroll choreography', () => {
+  const html = readFileSync(join(web, 'landing/index.html'), 'utf8');
+
+  it('points its navigation at targets that exist in the document', () => {
+    for (const m of html.matchAll(/href="#([a-z-]+)"/g)) {
+      expect(html, `#${m[1]} has no target`).toContain(`id="${m[1]}"`);
+    }
+  });
+
+  it('keeps every call to action outside the animated panels', () => {
+    const ground = /<div class="ground">([\s\S]*)<\/div>\s*<\/main>/.exec(html);
+    expect(ground, 'no always-visible ground section').not.toBeNull();
+    for (const route of ['/proof', '/onboard', '/dashboard', '/docs']) {
+      expect(ground![1], route).toContain(`href="${route}"`);
+    }
+  });
+
+  it('carries no control that does nothing', () => {
+    expect(html).not.toContain('language-switcher');
+  });
+
+  it('states the rule count the engine actually implements', () => {
+    const policy = readFileSync(join(here, '../../../packages/core/src/policy.ts'), 'utf8');
+    const ids = new Set(policy.match(/'R-[A-Z0-9-]+'/g) ?? []);
+    ids.delete("'R-OK'");
+    expect(ids.size).toBe(16);
+    expect(html).not.toMatch(/Fourteen|fourteen/);
+    expect(html).toMatch(/[Ss]ixteen/);
+  });
+
+  it('gives narrow screens a layout instead of a broken wide one', () => {
+    expect(landing).toMatch(/@media \(max-width: 860px\)/);
+    expect(landing).toContain('.ground-actions { flex-direction: column');
+  });
 });

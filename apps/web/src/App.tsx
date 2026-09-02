@@ -41,6 +41,7 @@ function Masthead({ mode, route, killed }: { mode: string | null; route: string;
       <div className="meta">
         <nav className="site-links" aria-label="Product">
           <a className="site-link" href="/proof">Proof</a>
+          <a className="site-link" href="/docs">Docs</a>
           <a className="site-link" href="/onboard">Connect</a>
           <a className="site-link" href="/authorize">Mandates</a>
           <a className="site-link" href="/">Home</a>
