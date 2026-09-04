@@ -227,7 +227,7 @@ export function MandateDetail({ id }: { id: string }) {
 }
 
 export function Reports({ slug }: { slug: string | null }) {
-  const [list, setList] = useState<{ slug: string; file: string }[] | null>(null);
+  const [list, setList] = useState<{ slug: string; title: string; description: string }[] | null>(null);
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -244,8 +244,10 @@ export function Reports({ slug }: { slug: string | null }) {
   if (error) return <div className="state is-error"><strong>Could not load reports</strong>{error}</div>;
   if (!list) return <Announce label="Loading"><SkeletonTable /></Announce>;
   if (list.length === 0) {
-    return <div className="state"><strong>No reports generated yet</strong>Run the analysis commands to produce them.</div>;
+    return <div className="state"><strong>No reports available</strong>None are registered on this instance.</div>;
   }
+
+  const current = list.find((r) => r.slug === slug);
 
   return (
     <>
@@ -257,12 +259,22 @@ export function Reports({ slug }: { slug: string | null }) {
             href={`#/reports/${r.slug}`}
             aria-current={slug === r.slug ? 'page' : undefined}
           >
-            {r.slug.replace(/-/g, ' ')}
+            {r.title}
           </a>
         ))}
       </nav>
-      {!slug && <div className="state">Pick a report.</div>}
-      {slug && !markdown && <Announce label="Loading"><SkeletonTable /></Announce>}
+      {current && <p className="hint">{current.description} Built live when you opened it.</p>}
+      {!slug && (
+        <div className="state">
+          <strong>Pick a report</strong>
+          Each one is generated from this instance when you open it, not read from a file.
+        </div>
+      )}
+      {slug && !markdown && (
+        <Announce label={`Building the ${current?.title ?? slug} report`}>
+          <SkeletonTable rows={8} />
+        </Announce>
+      )}
       {markdown && <div className="paper report">{<Markdown source={markdown} />}</div>}
     </>
   );

@@ -1,20 +1,9 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { buildReport, reportIndex } from '@mandate/worker/reports/live';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import { query } from '@mandate/db';
 
-const REPORTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../docs');
 
-const REPORTS: Record<string, string> = {
-  contention: 'contention.md',
-  results: 'results.md',
-  backtest: 'backtest.md',
-  'off-policy': 'off-policy.md',
-  adversarial: 'adversarial.md',
-  deconfliction: 'deconfliction.md',
-  taxonomy: 'taxonomy.md',
-};
 
 export function registerControlRoutes(app: FastifyInstance): void {
   app.get('/api/merchants', async () => {
@@ -71,27 +60,19 @@ export function registerControlRoutes(app: FastifyInstance): void {
     },
   );
 
-  app.get('/api/reports', async () => {
-    let present: string[] = [];
-    try {
-      present = readdirSync(REPORTS_DIR);
-    } catch {
-      present = [];
-    }
-    return {
-      reports: Object.entries(REPORTS)
-        .filter(([, file]) => present.includes(file))
-        .map(([slug, file]) => ({ slug, file })),
-    };
-  });
+  app.get('/api/reports', async () => ({ reports: reportIndex() }));
 
   app.get<{ Params: { name: string } }>('/api/reports/:name', async (request, reply) => {
-    const file = REPORTS[request.params.name];
-    if (!file) return reply.code(404).send({ error: 'unknown report' });
     try {
-      return { slug: request.params.name, markdown: readFileSync(join(REPORTS_DIR, file), 'utf8') };
-    } catch {
-      return reply.code(404).send({ error: 'report has not been generated yet' });
+      const markdown = await buildReport(request.params.name);
+      if (markdown === null) return reply.code(404).send({ error: 'unknown report' });
+      return { slug: request.params.name, markdown };
+    } catch (err) {
+      app.log.error({ event: 'report.build_failed', slug: request.params.name,
+        message: (err as Error).message });
+      return reply.code(500).send({
+        error: `that report could not be built: ${(err as Error).message}`,
+      });
     }
   });
 }

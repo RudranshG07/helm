@@ -174,7 +174,7 @@ export const api = {
   trace: (id: string) => get<DecisionTrace>(`/api/decisions/${encodeURIComponent(id)}/trace`),
   outreach: () => get<{ outreach: OutreachRow[]; funnel: Record<string, number> }>('/api/outreach?limit=200'),
   chargeQueue: () => get<{ queue: QueueRow[]; note: string }>('/api/charge-queue'),
-  reports: () => get<{ reports: { slug: string; file: string }[] }>('/api/reports'),
+  reports: () => get<{ reports: { slug: string; title: string; description: string }[] }>('/api/reports'),
   report: (slug: string) => get<{ slug: string; markdown: string }>(`/api/reports/${slug}`),
   detail: (id: string) => get<Detail>(`/api/subscriptions/${encodeURIComponent(id)}`),
   overview: () => get<Overview>('/api/overview'),
