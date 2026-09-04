@@ -1,6 +1,6 @@
 node_modules/
 dist/
-build/
+/build/
 *.tsbuildinfo
 
 .env
@@ -10,14 +10,14 @@ build/
 
 *.pem
 *.key
-secrets/
-keys/
+/secrets/
+/keys/
 
-data/
-imports/
+/data/
+/imports/
 *.csv
 
-docs/
+/docs/
 *.md
 !README.md
 

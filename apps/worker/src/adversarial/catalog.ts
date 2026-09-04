@@ -163,6 +163,8 @@ export const SCENARIOS: Scenario[] = [
   { id: 'X3', category: 'Taxonomy evolution', title: 'A published recovery number changes with no way to explain why', expectation: 'Every bucket or budget change writes a before and after audit row.', outcome: 'HANDLED' },
   { id: 'X4', category: 'Taxonomy evolution', title: 'A gateway-side failure spends the customer\'s attempt budget', expectation: 'error_source internal and business are excluded from the budget, and only business is logged as our bug.', outcome: 'HANDLED' },
   { id: 'X5', category: 'Taxonomy evolution', title: 'Reclassifying twice double-counts the change', expectation: 'A second run scans zero rows and writes no further audit rows.', outcome: 'HANDLED' },
+  { id: 'DP1', category: 'Deploy', title: 'A gitignore pattern silently excludes application source', expectation: 'Directory patterns are anchored, and every source file under apps and packages is tracked.', outcome: 'HANDLED' },
+  { id: 'DP2', category: 'Deploy', title: 'The build succeeds but the process cannot start because a module never shipped', expectation: 'A tracked-only checkout contains every module the application imports.', outcome: 'HANDLED' },
   { id: 'RS1', category: 'Resilience', title: 'One failing stage stops every stage after it', expectation: 'Each stage is isolated; a failure is recorded and the rest still run.', outcome: 'HANDLED' },
   { id: 'RS2', category: 'Resilience', title: 'An analytics failure starves reconciliation and dispatch', expectation: 'Money and safety stages run before analytics, every tick.', outcome: 'HANDLED' },
   { id: 'RS3', category: 'Resilience', title: 'A partly failed tick is logged as a success', expectation: 'A degraded tick names the stages that failed.', outcome: 'HANDLED' },
