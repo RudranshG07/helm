@@ -60,9 +60,18 @@ export interface SimulatorOptions {
   medianPaise: number;
 }
 
+function hashString(value: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 export class SimulatedGateway implements Gateway {
   private readonly orders = new Map<string, { order: OrderRef; payments: PaymentRef[] }>();
-  private readonly rand: () => number;
+  private readonly seed: number;
   private readonly model: GenerativeModel;
   private readonly medianPaise: number;
   private seq = 0;
@@ -70,16 +79,20 @@ export class SimulatedGateway implements Gateway {
   public readonly charges: { receipt: string; at: Date; amount_paise: number; succeeded: boolean; p: number }[] = [];
 
   constructor(options: SimulatorOptions) {
-    this.rand = mulberry32(options.seed ?? 42);
+    this.seed = options.seed ?? 42;
     this.model = options.model ?? DEFAULT_MODEL;
     this.medianPaise = options.medianPaise;
+  }
+
+  private drawFor(receipt: string): number {
+    return mulberry32((this.seed ^ hashString(receipt)) >>> 0)();
   }
 
   async createOrderAndCharge(req: ChargeRequest): Promise<{ order: OrderRef; payment: PaymentRef | null }> {
     if (this.orders.has(req.receipt)) throw new DuplicateReceiptError(req.receipt);
 
     const p = successProbability(req.scheduled_for, req.amount_paise, this.medianPaise, this.model);
-    const succeeded = this.rand() < p;
+    const succeeded = this.drawFor(req.receipt) < p;
 
     this.seq += 1;
     const order: OrderRef = { id: `order_sim_${this.seq}`, receipt: req.receipt };

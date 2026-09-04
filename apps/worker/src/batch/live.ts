@@ -1,4 +1,4 @@
-import { NPCI_ATTEMPT_BUDGET, SuccessModel, evaluate } from '@mandate/core';
+import { NPCI_ATTEMPT_BUDGET, SuccessModel, TAXONOMY_VERSION, evaluate } from '@mandate/core';
 import type { Outcome, PolicyContext, Proposal } from '@mandate/core';
 import { query, withTransaction } from '@mandate/db';
 import { execute } from '../executor.ts';
@@ -39,6 +39,20 @@ export interface LiveBatchOptions {
   merchantId?: string;
 }
 
+const HARD_SHARE = 0.15;
+
+export function bucketFor(index: number): {
+  bucket: 'SOFT_LIQUIDITY' | 'HARD_INSTRUMENT' | 'HARD_CUSTOMER';
+  reason: string;
+  source: string;
+} {
+  const slot = index % 20;
+  if (slot === 3) return { bucket: 'HARD_INSTRUMENT', reason: 'invalid_vpa', source: 'customer' };
+  if (slot === 11) return { bucket: 'HARD_CUSTOMER', reason: 'payment_cancelled', source: 'customer' };
+  if (slot === 17) return { bucket: 'HARD_INSTRUMENT', reason: 'invalid_vpa', source: 'customer' };
+  return { bucket: 'SOFT_LIQUIDITY', reason: 'insufficient_funds', source: 'customer' };
+}
+
 async function seedMandates(merchantId: string, mandates: Mandate[]): Promise<void> {
   await withTransaction(async (client) => {
     await client.query(
@@ -60,12 +74,14 @@ async function seedMandates(merchantId: string, mandates: Mandate[]): Promise<vo
          `token_${m.id}`, `cust_${m.id}`],
       );
 
+      const classification = bucketFor(mandates.indexOf(m));
       await client.query(
         `INSERT INTO payment_attempt (
            subscription_id, cycle, attempted_at, status, amount_paise,
            error_reason, error_source, bucket, issuer, initiated_by
-         ) VALUES ($1,$2,$3,'failed',$4,'insufficient_funds','customer','SOFT_LIQUIDITY',$5,'razorpay_default')`,
-        [id, m.cycle_start, m.first_failure_at, m.amount_paise, m.issuer],
+         ) VALUES ($1,$2,$3,'failed',$4,$6,$7,$8,$5,'razorpay_default')`,
+        [id, m.cycle_start, m.first_failure_at, m.amount_paise, m.issuer,
+         classification.reason, classification.source, classification.bucket],
       );
     }
   });
@@ -91,18 +107,21 @@ async function recordDecision(
   cycle: Date,
   proposal: Proposal,
   verdict: { verdict: string; rule_id: string; scheduled_for?: Date | string | null; explanation?: string },
+  context: Record<string, unknown>,
 ): Promise<number | null> {
   const { rows } = await query<{ id: string }>(
     `INSERT INTO decision (
        subscription_id, cycle, proposed_action, proposed_by, confidence,
-       verdict, rule_id, scheduled_for, proposed_for, rationale, explanation
-     ) VALUES ($1,$2,$3,'allocator',$4,$5,$6,$7,$8,$9,$10)
+       verdict, rule_id, scheduled_for, proposed_for, rationale, explanation,
+       agent_context, taxonomy_version
+     ) VALUES ($1,$2,$3,'allocator',$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING id::text AS id`,
     [
       subscriptionId, cycle, proposal.action, proposal.confidence ?? null,
       verdict.verdict, verdict.rule_id,
       verdict.scheduled_for ?? null, proposal.scheduled_for ?? null,
       proposal.reason ?? null, verdict.explanation ?? null,
+      context, TAXONOMY_VERSION,
     ],
   );
   const id = rows[0]?.id;
@@ -206,6 +225,7 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
     }
 
     result.treatment_mandates += 1;
+    const classified = bucketFor(mandates.indexOf(m));
     let recovered = false;
     let attemptsUsed = 1;
     let cursor = m.first_failure_at > now ? m.first_failure_at : now;
@@ -215,7 +235,7 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
       const plan = buildPlan(
         {
           subscription_id: subscriptionId,
-          bucket: 'SOFT_LIQUIDITY',
+          bucket: classified.bucket,
           issuer: m.issuer,
           method: 'upi_autopay',
           amount_paise: m.amount_paise,
@@ -230,12 +250,23 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
       );
 
       const proposal: Proposal = planToProposal(plan, subscriptionId);
-      const ctx = await liveContext(subscriptionId, m, attemptsUsed, cursor);
+      const ctx = await liveContext(subscriptionId, m, attemptsUsed, cursor, classified.bucket);
       const verdict = evaluate(proposal, ctx);
 
       if (verdict.verdict === 'DENY') {
         result.policy_refusals[verdict.rule_id] = (result.policy_refusals[verdict.rule_id] ?? 0) + 1;
-        await recordDecision(subscriptionId, m.cycle_start, proposal, verdict);
+        await recordDecision(subscriptionId, m.cycle_start, proposal, verdict, {
+          bucket: 'SOFT_LIQUIDITY',
+          issuer: m.issuer,
+          method: 'upi_autopay',
+          amount_paise: m.amount_paise,
+          attempts_remaining: NPCI_ATTEMPT_BUDGET - attemptsUsed,
+          cycle_start: m.cycle_start.toISOString(),
+          cycle_end: m.cycle_end.toISOString(),
+          now: cursor.toISOString(),
+          arm: 'treatment',
+          source: 'batch',
+        });
         result.decisions_recorded += 1;
         break;
       }
@@ -251,7 +282,20 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
       const at = new Date(target);
       if (at >= m.cycle_end) break;
 
-      const decisionId = await recordDecision(subscriptionId, m.cycle_start, proposal, verdict);
+      const decisionId = await recordDecision(subscriptionId, m.cycle_start, proposal, verdict, {
+        bucket: 'SOFT_LIQUIDITY',
+        issuer: m.issuer,
+        method: 'upi_autopay',
+        amount_paise: m.amount_paise,
+        attempts_remaining: NPCI_ATTEMPT_BUDGET - attemptsUsed,
+        expected_paise: plan.expected_paise,
+        slots_considered: plan.schedule.length,
+        cycle_start: m.cycle_start.toISOString(),
+        cycle_end: m.cycle_end.toISOString(),
+        now: cursor.toISOString(),
+        arm: 'treatment',
+        source: 'batch',
+      });
       result.decisions_recorded += 1;
 
       const outcome = await execute(
@@ -327,6 +371,7 @@ async function liveContext(
   m: Mandate,
   attemptsUsed: number,
   now: Date,
+  bucket: 'SOFT_LIQUIDITY' | 'HARD_INSTRUMENT' | 'HARD_CUSTOMER' = 'SOFT_LIQUIDITY',
 ): Promise<PolicyContext> {
   const { rows } = await query<{ attempts_used: number; paid: boolean }>(
     `SELECT
@@ -350,7 +395,7 @@ async function liveContext(
     cycle_already_paid: rows[0]?.paid ?? false,
     attempts_remaining: Math.max(0, NPCI_ATTEMPT_BUDGET - attemptsUsed),
     attempt_number: attemptsUsed + 1,
-    last_bucket: 'SOFT_LIQUIDITY',
+    last_bucket: bucket,
     consecutive_soft_cycles: 0,
     max_soft_cycles: 3,
     attempt_exists: false,
