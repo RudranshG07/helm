@@ -136,20 +136,20 @@ export default function Proof() {
 
   async function runBatch() {
     setRunning(true);
-    setStep('Seeding 120 failed mandates');
+    setStep('Clearing the last run and seeding 60 mandates');
     try {
       const started = Date.now();
       const ticker = window.setInterval(() => {
         const elapsed = Date.now() - started;
         if (elapsed > 6000) setStep('Executing charges, exactly once');
         else if (elapsed > 3000) setStep('Ranking candidate times and applying the rules');
-        else setStep('Seeding 120 failed mandates');
+        else setStep('Clearing the last run and seeding 60 mandates');
       }, 900);
 
       const r = await fetch('/api/authorize/demo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: 120 }),
+        body: JSON.stringify({ count: 60 }),
       });
       window.clearInterval(ticker);
 
@@ -214,7 +214,7 @@ export default function Proof() {
           {running ? 'Running…' : 'Run the whole thing again'}
         </button>
         <span className="field-note" role="status" aria-live="polite">
-          {step ?? 'Runs 120 mandates through the real decision engine and executor against a simulated gateway.'}
+          {step ?? 'Clears the last run, then puts 60 mandates through the real decision engine and executor against a simulated gateway, anchored to 09:00 IST today so repeated runs are comparable.'}
         </span>
       </div>
 

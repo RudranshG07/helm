@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { query, withTransaction } from '@mandate/db';
-import { runLiveBatch } from '@mandate/worker/batch/live';
+import { cleanup, runLiveBatch } from '@mandate/worker/batch/live';
 import { probeAccount } from './account.ts';
 
 interface RzpOrder { id: string; amount: number; status: string }
@@ -236,9 +236,16 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
     const count = Math.min(Math.max(Number(request.body?.count ?? 40), 1), 200);
 
     try {
-      const result = await runLiveBatch({ count, merchantId: DEMO_MERCHANT_ID });
+      await cleanup(DEMO_MERCHANT_ID);
+      const anchored = new Date(Date.now());
+      anchored.setUTCHours(3, 30, 0, 0);
+      const result = await runLiveBatch({
+        count,
+        merchantId: DEMO_MERCHANT_ID,
+        now: anchored,
+      });
       app.log.info({ event: 'authorize.demo_batch', count, merchant_id: DEMO_MERCHANT_ID });
-      return { ...result, simulated: true };
+      return { ...result, simulated: true, anchored_at: anchored.toISOString() };
     } catch (err) {
       app.log.error({ event: 'authorize.demo_failed', message: (err as Error).message });
       return reply.code(500).send({ error: (err as Error).message });
