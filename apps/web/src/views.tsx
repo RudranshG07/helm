@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.ts';
 import type { Control, Detail, DecisionTrace, Merchant, OutreachRow, QueueRow } from './api.ts';
+import { forgetSession } from './session.ts';
 import { Markdown } from './markdown.tsx';
 import { Announce, SkeletonTable } from './skeletons.tsx';
 import { bucketLabel, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
@@ -280,40 +281,87 @@ export function Reports({ slug }: { slug: string | null }) {
   );
 }
 
-export function Merchants() {
+export function Account() {
   const [rows, setRows] = useState<Merchant[] | null>(null);
   useEffect(() => { api.merchants().then((r) => setRows(r.merchants)).catch(() => setRows([])); }, []);
+
   if (!rows) return <Announce label="Loading"><SkeletonTable /></Announce>;
-  if (rows.length === 0) return <div className="state"><strong>No merchants</strong>Import a CSV or connect an account.</div>;
+
+  const m = rows[0];
+  if (!m) {
+    return (
+      <div className="state">
+        <strong>No account yet</strong>
+        Connect a Razorpay account or import a CSV to begin.
+      </div>
+    );
+  }
 
   return (
-    <div className="paper table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Merchant</th>
-            <th scope="col">Mode</th>
-            <th scope="col">Integration</th>
-            <th scope="col" className="num">Mandates</th>
-            <th scope="col">Write access</th>
-            <th scope="col">Pooling</th>
-            <th scope="col">Consent</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((m) => (
-            <tr key={m.id}>
-              <td>{m.name}<br /><span className="ref">{m.id}</span></td>
-              <td><span className={`badge ${m.mode === 'live' ? 'critical' : 'healthy'}`}>{m.mode}</span></td>
-              <td>{m.integration ?? <span className="ref">unknown</span>}</td>
-              <td className="num">{m.subscriptions}</td>
-              <td>{m.write_enabled ? <span className="badge critical">enabled</span> : <span className="badge healthy">read only</span>}</td>
-              <td>{m.cross_merchant_signals ? 'opted in' : 'opted out'}</td>
-              <td>{m.consent_signed_at ? ist(m.consent_signed_at) : <span className="ref">none</span>}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <>
+      <div className="tiles">
+        <div className="tile paper">
+          <span className="eyebrow">Business</span>
+          <strong className="name">{m.name}</strong>
+          <span className="hint">{m.id}</span>
+        </div>
+        <div className="tile paper">
+          <span className="eyebrow">Mandates watched</span>
+          <strong className="num">{m.subscriptions}</strong>
+          <span className="hint">
+            {m.integration === 'subscriptions' ? 'Razorpay Subscriptions'
+              : m.integration === 'recurring_tokens' ? 'saved mandates charged directly'
+              : 'imported from a file'}
+          </span>
+        </div>
+        <div className="tile paper">
+          <span className="eyebrow">Write access</span>
+          <strong className="name">
+            <span className={`badge ${m.write_enabled ? 'at_risk' : 'healthy'}`}>
+              {m.write_enabled ? 'charging enabled' : 'read only'}
+            </span>
+          </strong>
+          <span className="hint">
+            {m.consent_signed_at
+              ? `You granted this on ${ist(m.consent_signed_at)}. Revoke it on the connect page.`
+              : 'Nothing will be charged until you grant access on the connect page.'}
+          </span>
+        </div>
+        <div className="tile paper">
+          <span className="eyebrow">Mode</span>
+          <strong className="name">
+            <span className={`badge ${m.mode === 'live' ? 'critical' : 'healthy'}`}>{m.mode}</span>
+          </strong>
+          <span className="hint">
+            {m.cross_merchant_signals
+              ? 'Sharing timing signals with other businesses, so a customer is not debited twice in one morning.'
+              : 'Not sharing timing signals with other businesses.'}
+          </span>
+        </div>
+      </div>
+
+      <SignOut />
+    </>
+  );
+}
+
+function SignOut() {
+  return (
+    <div className="paper sign-out">
+      <div>
+        <strong>This browser is signed in to that account</strong>
+        <p className="hint">
+          Signing out forgets the link on this device only. It keeps working everywhere else, so
+          use it before handing this machine to someone else.
+        </p>
+      </div>
+      <button
+        type="button"
+        className="cta ghost"
+        onClick={() => { forgetSession(); window.location.reload(); }}
+      >
+        Sign out
+      </button>
     </div>
   );
 }
@@ -418,7 +466,7 @@ export function Outreach() {
         ))}
       </div>
 
-      <div className="paper table-wrap" style={{ marginTop: 20 }}>
+      <div className="paper table-wrap spaced-lg">
         <table>
           <thead>
             <tr>

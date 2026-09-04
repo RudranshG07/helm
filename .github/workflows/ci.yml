@@ -34,13 +34,21 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
       - name: Migrate
         run: node packages/db/migrate.js
+
+      - name: Create and migrate the test databases
+        run: |
+          for db in mandate_rescue_test mandate_rescue_test_api; do
+            PGPASSWORD=mandate createdb -h 127.0.0.1 -p 5433 -U mandate -O mandate "$db"
+            DATABASE_URL="postgres://mandate:mandate@127.0.0.1:5433/$db" \
+              node packages/db/migrate.js
+          done
 
       - name: Typecheck
         run: pnpm typecheck

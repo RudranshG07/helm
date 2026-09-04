@@ -256,7 +256,7 @@ export default function Proof() {
           </div>
 
           {real.decline_codes.length > 0 && (
-            <div className="paper table-wrap" style={{ marginTop: 18 }}>
+            <div className="paper table-wrap spaced">
               <table>
                 <thead>
                   <tr>
@@ -437,9 +437,9 @@ export default function Proof() {
           </div>
         </div>
 
-        <div className="report-block paper" style={{ marginTop: 18 }}>
+        <div className="report-block paper spaced">
           <h3>The claim underneath it, and how it could be proved wrong</h3>
-          <p style={{ margin: '0 0 14px', color: 'var(--ink-soft)', lineHeight: 1.55 }}>
+          <p className="block-lede">
             If a failed debit is purely about an empty account, small and large amounts should fail
             at the same rate whenever the account is short. If it is partly a queue, large debits
             should fail disproportionately in the contested window and not outside it. Helm runs
@@ -451,7 +451,7 @@ export default function Proof() {
             <div><dt>Large-debit threshold</dt><dd>{rupees(x.contention_threshold_paise)}</dd></div>
             <div><dt>Verdict</dt><dd>{x.contention_verdict.replace(/_/g, ' ')}</dd></div>
           </dl>
-          <p className="report-caveat" style={{ marginTop: 14 }}>{x.contention_explanation}</p>
+          <p className="report-caveat spaced-sm">{x.contention_explanation}</p>
         </div>
       </Section>
 

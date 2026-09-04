@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '@mandate/db';
+import { requireMerchant } from './session.ts';
 
 export interface QueueRow {
   subscription_id: string;
@@ -39,15 +40,18 @@ LEFT JOIN LATERAL (
    ORDER BY attempted_at DESC LIMIT 1
 ) a ON TRUE
 WHERE h.risk_band <> 'healthy'
+  AND m.id = $1
   AND m.integration IS DISTINCT FROM 'recurring_tokens'
 ORDER BY (s.method <> 'card') DESC, s.amount_paise DESC
-LIMIT $1
+LIMIT $2
 `;
 
 export function registerChargeQueueRoutes(app: FastifyInstance): void {
-  app.get<{ Querystring: { limit?: string } }>('/api/charge-queue', async (request) => {
+  app.get<{ Querystring: { limit?: string } }>('/api/charge-queue', async (request, reply) => {
+    const merchant = await requireMerchant(request, reply);
+    if (merchant === null) return reply;
     const limit = Math.min(500, Number(request.query.limit ?? 100) || 100);
-    const { rows } = await query<QueueRow>(QUEUE_SQL, [limit]);
+    const { rows } = await query<QueueRow>(QUEUE_SQL, [merchant, limit]);
     return {
       queue: rows,
       note:

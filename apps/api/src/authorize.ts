@@ -64,7 +64,8 @@ const DEMO_MERCHANT_ID = 'helm_demo_batch';
 const MAX_AMOUNT_PAISE = 1_500_000;
 
 export function registerAuthorizeRoutes(app: FastifyInstance): void {
-  app.get('/api/authorize/config', async () => {
+  app.get('/api/authorize/config', async (request, reply) => {
+    if ((await requireMerchant(request, reply)) === null) return reply;
     let ready = true;
     let problem: string | null = null;
     try {
@@ -90,13 +91,17 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
     };
   });
 
-  app.get('/api/authorize/account', async () => probeAccount(process.env['RAZORPAY_KEY_ID']));
+  app.get('/api/authorize/account', async (request, reply) => {
+    if ((await requireMerchant(request, reply)) === null) return reply;
+    return probeAccount(process.env['RAZORPAY_KEY_ID']);
+  });
 
   app.post<{
     Body: { label?: string; amount_paise?: number; method?: string; contact?: string; email?: string };
   }>(
     '/api/authorize/prepare',
     async (request, reply) => {
+      if ((await requireMerchant(request, reply)) === null) return reply;
       const label = (request.body?.label ?? '').trim() || 'Mandate';
       const amount = Number(request.body?.amount_paise ?? 0);
       const method = request.body?.method === 'card' ? 'card' : 'emandate';
@@ -175,6 +180,7 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
   app.post<{ Body: { payment_id?: string; label?: string; amount_paise?: number } }>(
     '/api/authorize/complete',
     async (request, reply) => {
+      if ((await requireMerchant(request, reply)) === null) return reply;
       const paymentId = (request.body?.payment_id ?? '').trim();
       if (!paymentId) return reply.code(400).send({ error: 'No payment id supplied.' });
 
@@ -269,7 +275,8 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
     }
   });
 
-  app.get('/api/authorize/mandates', async () => {
+  app.get('/api/authorize/mandates', async (request, reply) => {
+    if ((await requireMerchant(request, reply)) === null) return reply;
     const { rows } = await query(
       `SELECT id, customer_ref AS label, amount_paise, rzp_token_id, status, current_start
          FROM subscription

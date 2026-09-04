@@ -127,7 +127,7 @@ Reported here rather than left for a reviewer to find.
 - **The dashboard link is a bearer credential.** Connecting a working Razorpay key issues a session token, and every read is scoped to the merchant it resolves to — but there is no email login, no second factor and no revocation list. Whoever holds the link holds that dashboard until the merchant connects again and rotates it.
 - **Onboarding asks for API keys.** Razorpay partner OAuth is the correct answer and needs approval we could not obtain. A CSV import path exists for merchants who will not hand over keys.
 
-The full catalogue — **270 scenarios, 263 handled, 5 detected, 2 unhandled** — is generated from the code at [`/docs`](https://helm-xuxb.onrender.com/docs), including the ones we still get wrong, in our own words.
+The full catalogue — **273 scenarios, 266 handled, 5 detected, 2 unhandled** — is generated from the code at [`/docs`](https://helm-xuxb.onrender.com/docs), including the ones we still get wrong, in our own words.
 
 ---
 
@@ -136,7 +136,7 @@ The full catalogue — **270 scenarios, 263 handled, 5 detected, 2 unhandled** �
 ```bash
 pnpm install
 pnpm dev          # database, migrations, web build, worker, api on :3000
-pnpm test         # 955 tests, against an isolated database
+pnpm test         # 958 tests, against isolated databases
 ```
 
 Deployed as a single service: the worker runs inside the web process, so it fits a free tier. Postgres is in Mumbai for data residency.
@@ -152,10 +152,10 @@ connect   /onboard     dash    /dashboard mandates  /authorize
 
 | | |
 |---|---|
-| Tests | 955 |
-| Adversarial scenarios | 270 — 263 handled, 5 detected, 2 unhandled |
+| Tests | 958 |
+| Adversarial scenarios | 273 — 266 handled, 5 detected, 2 unhandled |
 | Policy rules | 16 |
-| Migrations | 15 |
+| Migrations | 16 |
 | Source files | 121 |
 
 Every figure on this page is measured or generated. Nothing is estimated.

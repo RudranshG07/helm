@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { rupees } from './format.ts';
+import { sessionHeaders } from './session.ts';
 import { Announce, SkeletonReport } from './skeletons.tsx';
 
 type RailStatus = 'usable' | 'disabled' | 'not_provisioned' | 'failing';
@@ -38,15 +39,6 @@ interface Mandate {
   status: string;
 }
 
-interface BatchResult {
-  mandates: number;
-  amount_at_risk_paise: number;
-  amount_recovered_paise: number;
-  attempts_spent: number;
-  mandates_recovered: number;
-  duplicates_blocked: number;
-  exactly_once_held: boolean;
-}
 
 type State = 'idle' | 'preparing' | 'open' | 'saving' | 'done' | 'error';
 type PayMethod = 'emandate' | 'card';
@@ -90,42 +82,23 @@ export default function Authorize() {
   const [message, setMessage] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [payMethod, setPayMethod] = useState<PayMethod>('emandate');
-  const [batch, setBatch] = useState<BatchResult | null>(null);
-  const [batchState, setBatchState] = useState<'idle' | 'running' | 'error'>('idle');
-  const [batchError, setBatchError] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
   const checkoutReady = useCheckoutScript();
 
   const refresh = useCallback(async () => {
-    const [c, m] = await Promise.all([
-      fetch('/api/authorize/config').then((r) => r.json() as Promise<Config>),
-      fetch('/api/authorize/mandates').then((r) => r.json() as Promise<{ mandates: Mandate[] }>),
+    const [cRes, mRes] = await Promise.all([
+      fetch('/api/authorize/config', { headers: sessionHeaders() }),
+      fetch('/api/authorize/mandates', { headers: sessionHeaders() }),
     ]);
-    setConfig(c);
-    setMandates(m.mandates);
+    if (cRes.status === 401 || mRes.status === 401) {
+      setLocked(true);
+      return;
+    }
+    setConfig((await cRes.json()) as Config);
+    setMandates(((await mRes.json()) as { mandates: Mandate[] }).mandates);
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
-
-  async function runBatch() {
-    setBatchState('running');
-    setBatchError(null);
-    try {
-      const result = await fetch('/api/authorize/demo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: 40 }),
-      }).then(async (r) => {
-        const b = await r.json();
-        if (!r.ok) throw new Error(b.error ?? 'The batch could not run.');
-        return b as BatchResult;
-      });
-      setBatch(result);
-      setBatchState('idle');
-    } catch (err) {
-      setBatchError((err as Error).message);
-      setBatchState('error');
-    }
-  }
 
   async function authorize(label: string, amountPaise: number) {
     if (!window.Razorpay) { setMessage('Checkout has not loaded yet.'); setState('error'); return; }
@@ -136,7 +109,7 @@ export default function Authorize() {
     try {
       const prep = await fetch('/api/authorize/prepare', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...sessionHeaders() },
         body: JSON.stringify({ label, amount_paise: amountPaise, method: payMethod }),
       }).then(async (r) => {
         const b = await r.json();
@@ -162,7 +135,7 @@ export default function Authorize() {
           try {
             const saved = await fetch('/api/authorize/complete', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...sessionHeaders() },
               body: JSON.stringify({ payment_id: response.razorpay_payment_id, label, amount_paise: amountPaise }),
             }).then(async (r) => {
               const b = await r.json();
@@ -194,6 +167,33 @@ export default function Authorize() {
       setMessage((err as Error).message);
       setState('error');
     }
+  }
+
+  if (locked) {
+    return (
+      <div className="shell onboard">
+        <header className="masthead">
+          <a className="wordmark" href="/">Helm</a>
+          <nav className="site-links" aria-label="Product">
+            <a className="site-link" href="/proof">Proof</a>
+            <a className="site-link" href="/docs">Docs</a>
+            <a className="site-link" href="/onboard">Connect</a>
+          </nav>
+        </header>
+        <div className="state locked">
+          <strong>This page authorises mandates on a real account</strong>
+          <p>
+            It can move money, so it is not open to visitors. Connect your Razorpay account and
+            open this page from the dashboard link issued to you.
+          </p>
+          <a className="cta" href="/onboard">Connect your Razorpay account</a>
+          <p className="hint">
+            Only wanted to see the engine work? <a className="link" href="/proof">The measured
+            run</a> is public.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (!config) {
@@ -234,7 +234,7 @@ export default function Authorize() {
             {account.probed ? (blocked ? 'blocked' : 'ready') : 'unreachable'}
           </span>
         </div>
-        <p className="onboard-lede" style={{ marginTop: -4 }}>{account.summary}</p>
+        <p className="onboard-lede pull-up">{account.summary}</p>
 
         {account.rails.length > 0 && (
           <ul className="rails">
@@ -261,48 +261,11 @@ export default function Authorize() {
             {' '}Complete activation in the Razorpay dashboard to authorise a live mandate here.
           </p>
           <p>
-            You do not need it to see Helm work. The batch below runs the real decision engine,
-            the real policy checks and the real exactly-once executor against a simulated gateway.
+            You do not need it to see Helm work. The same engine, policy checks and exactly-once
+            executor have already been measured over a batch of mandates, and every decision in
+            that run is recorded.
           </p>
-          <button type="button" className="cta" onClick={() => void runBatch()} disabled={batchState === 'running'}>
-            {batchState === 'running' ? 'Running…' : 'Run a recovery batch'}
-          </button>
-          <p className="field-note">
-            40 failed mandates. Every decision is recorded and appears on the dashboard.
-          </p>
-          {batchState === 'error' && batchError && (
-            <div className="form-error" role="alert">{batchError}</div>
-          )}
-        </section>
-      )}
-
-      {batch && (
-        <section>
-          <div className="section-head">
-            <h2>Batch result</h2>
-            <span className="badge healthy">simulated gateway</span>
-          </div>
-          <div className="tiles">
-            <div className="tile paper">
-              <span className="eyebrow">Recovered</span>
-              <strong className="num">{rupees(batch.amount_recovered_paise)}</strong>
-              <span className="hint">of {rupees(batch.amount_at_risk_paise)} at risk</span>
-            </div>
-            <div className="tile paper">
-              <span className="eyebrow">Mandates saved</span>
-              <strong className="num">{batch.mandates_recovered} / {batch.mandates}</strong>
-              <span className="hint">{batch.attempts_spent} attempts spent</span>
-            </div>
-            <div className="tile paper">
-              <span className="eyebrow">Exactly once</span>
-              <strong className="num">{batch.exactly_once_held ? 'held' : 'violated'}</strong>
-              <span className="hint">{batch.duplicates_blocked} duplicates blocked</span>
-            </div>
-          </div>
-          <p className="field-note" style={{ marginTop: 16 }}>
-            Amounts come from a simulated gateway, not real money. The decisions behind them are
-            the ones Helm would make on a live account. <a className="link" href="/dashboard">Open the dashboard</a>
-          </p>
+          <a className="cta" href="/proof">See the measured run</a>
         </section>
       )}
 
@@ -322,7 +285,7 @@ export default function Authorize() {
             ))}
           </div>
 
-          <p className="onboard-lede" style={{ marginTop: -8 }}>
+          <p className="onboard-lede pull-up-more">
             {payMethod === 'card'
               ? 'Use the recurring-eligible test card below. A generic test card is refused as not eligible.'
               : 'Pick any bank, then choose Success on the simulated bank page.'}

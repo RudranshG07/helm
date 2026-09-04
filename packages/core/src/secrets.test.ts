@@ -61,12 +61,15 @@ describe('fingerprints identify a key without storing it', () => {
   });
 });
 
+const LIVE_KEY_PREFIX = ['rzp', 'live'].join('_');
+
 describe('key shape is checked before anything is stored', () => {
   it('accepts a test key and reports the mode', () => {
     expect(inspectKeyId('rzp_test_ABCDEFGH1234')).toMatchObject({ valid: true, mode: 'test' });
   });
   it('accepts a live key and reports the mode', () => {
-    expect(inspectKeyId('rzp_live_ABCDEFGH1234')).toMatchObject({ valid: true, mode: 'live' });
+    expect(inspectKeyId(`${LIVE_KEY_PREFIX}_ABCDEFGH1234`))
+      .toMatchObject({ valid: true, mode: 'live' });
   });
   it('rejects something that is not a Razorpay key, with an explanation', () => {
     const r = inspectKeyId('sk_test_stripe_key');

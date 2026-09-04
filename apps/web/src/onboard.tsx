@@ -26,18 +26,18 @@ async function send<T>(path: string, body: unknown): Promise<T> {
 }
 
 function PrivateLink() {
-  const [copied, setCopied] = useState(false);
+  const [copy, setCopy] = useState<'idle' | 'done' | 'failed'>('idle');
   const token = storedSession();
   if (!token) return null;
   const link = dashboardLink(token);
 
-  async function copy() {
+  async function toClipboard() {
     try {
       await navigator.clipboard.writeText(link);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      setCopy('done');
+      window.setTimeout(() => setCopy('idle'), 2000);
     } catch {
-      setCopied(false);
+      setCopy('failed');
     }
   }
 
@@ -51,10 +51,15 @@ function PrivateLink() {
       </p>
       <div className="private-link-row">
         <code className="ref">{link}</code>
-        <button type="button" className="cta ghost" onClick={() => void copy()}>
-          {copied ? 'Copied' : 'Copy link'}
+        <button type="button" className="cta ghost" onClick={() => void toClipboard()}>
+          {copy === 'done' ? 'Copied' : 'Copy link'}
         </button>
       </div>
+      {copy === 'failed' && (
+        <span className="hint" role="alert">
+          This browser would not let the page copy for you. Select the link above and copy it.
+        </span>
+      )}
     </div>
   );
 }

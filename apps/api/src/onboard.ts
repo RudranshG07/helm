@@ -283,6 +283,7 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
   );
 
   app.get<{ Params: { id: string } }>('/api/onboard/:id/keycheck', async (request, reply) => {
+    if (!(await requireOwnMerchant(request, reply, request.params.id))) return reply;
     const { rows } = await query<{ rzp_key_id: string | null; rzp_key_secret_enc: Buffer | null }>(
       `SELECT rzp_key_id, rzp_key_secret_enc FROM merchant WHERE id = $1`,
       [request.params.id],

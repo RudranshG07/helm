@@ -4,7 +4,7 @@ export function SkeletonReport() {
       <div className="skeleton title-shape" />
       <div className="skeleton line-shape medium" />
       <div className="skeleton line-shape short" />
-      <div className="skeleton-tiles" style={{ marginTop: 18 }}>
+      <div className="skeleton-tiles spaced">
         <div className="skeleton tile-shape" />
         <div className="skeleton tile-shape" />
         <div className="skeleton tile-shape" />
@@ -16,7 +16,7 @@ export function SkeletonReport() {
 export function SkeletonTable({ rows = 5 }: { rows?: number }) {
   return (
     <div className="skeleton-stack" aria-hidden="true">
-      <div className="skeleton row-shape" style={{ opacity: 0.6 }} />
+      <div className="skeleton row-shape is-faint" />
       {Array.from({ length: rows }, (_, i) => (
         <div className="skeleton row-shape" key={i} />
       ))}
@@ -30,12 +30,12 @@ export function SkeletonDoc() {
       <div className="skeleton title-shape" />
       <div className="skeleton line-shape" />
       <div className="skeleton line-shape medium" />
-      <div className="skeleton-tiles" style={{ marginTop: 20 }}>
+      <div className="skeleton-tiles spaced-lg">
         <div className="skeleton tile-shape" />
         <div className="skeleton tile-shape" />
         <div className="skeleton tile-shape" />
       </div>
-      <div className="skeleton row-shape" style={{ marginTop: 20 }} />
+      <div className="skeleton row-shape spaced-lg" />
       <div className="skeleton row-shape" />
       <div className="skeleton row-shape" />
     </div>

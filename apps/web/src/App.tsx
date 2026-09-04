@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
 import { NotConnected, captureSessionFromUrl, forgetSession } from './session.ts';
 import type { AtRiskRow, Control, DeclineRow, DecisionRow, DenialRow, Overview, UnmappedRow } from './api.ts';
-import { ChargeQueue, KillSwitch, MandateDetail, Merchants, Outreach, Reports, Trace } from './views.tsx';
+import { Account, ChargeQueue, KillSwitch, MandateDetail, Outreach, Reports, Trace } from './views.tsx';
 import { Announce, SkeletonReport } from './skeletons.tsx';
 import { bucketLabel, compactRupees, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
 
@@ -19,11 +19,13 @@ const TABS = [
   { route: '', label: 'Overview' },
   { route: 'queue', label: 'Charge queue' },
   { route: 'outreach', label: 'Outreach' },
-  { route: 'merchants', label: 'Merchants' },
+  { route: 'account', label: 'Account' },
   { route: 'reports', label: 'Reports' },
 ] as const;
 
-function Masthead({ mode, route, killed }: { mode: string | null; route: string; killed: boolean }) {
+function Masthead({ mode, route, killed, business }: {
+  mode: string | null; route: string; killed: boolean; business?: string | null;
+}) {
   const live = mode === 'live';
   return (
     <header className="masthead">
@@ -48,6 +50,7 @@ function Masthead({ mode, route, killed }: { mode: string | null; route: string;
           <a className="site-link" href="/authorize">Mandates</a>
           <a className="site-link" href="/">Home</a>
         </nav>
+        {business && <span className="whose" title="The account this link belongs to">{business}</span>}
         {killed && <span className="mode is-live"><span className="dot" aria-hidden="true" />halted</span>}
         <span className={`mode${live ? ' is-live' : ''}`}>
           <span className="dot" aria-hidden="true" />
@@ -323,23 +326,26 @@ function NotConnectedScreen() {
     <div className="shell">
       <header className="masthead">
         <a className="wordmark" href="/">Helm</a>
-        <nav className="site-links" aria-label="Product">
-          <a className="site-link" href="/proof">Proof</a>
-          <a className="site-link" href="/docs">Docs</a>
-          <a className="site-link" href="/onboard">Connect</a>
-        </nav>
+        <div className="meta">
+          <nav className="site-links" aria-label="Product">
+            <a className="site-link" href="/proof">Proof</a>
+            <a className="site-link" href="/docs">Docs</a>
+            <a className="site-link" href="/onboard">Connect</a>
+            <a className="site-link" href="/">Home</a>
+          </nav>
+        </div>
       </header>
-      <div className="state">
+      <div className="state locked">
         <strong>This dashboard is private</strong>
-        It shows one business at a time: your mandates, your customers, your decisions. Nobody
-        reaches it without the link issued to your account.
-        <br />
+        <p>
+          It shows one business at a time: your mandates, your customers, your decisions. Nobody
+          reaches it without the link issued to your account.
+        </p>
         <a className="cta" href="/onboard">Connect your Razorpay account</a>
-        <br />
-        <span className="hint">
-          Already connected? Open the dashboard link you were given when you connected. Connecting
-          again with the same key issues a fresh one.
-        </span>
+        <p className="hint">
+          Already connected? Open the dashboard link you saved. Connecting again with the same
+          key issues a fresh link and retires the old one.
+        </p>
       </div>
     </div>
   );
@@ -351,14 +357,17 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<string | null>(null);
   const [control, setControl] = useState<Control | null>(null);
+  const [business, setBusiness] = useState<string | null>(null);
   const { route, param } = useHashRoute();
 
   const load = useCallback(async () => {
     try {
-      const [overview, atRiskRes, declines, decisions, health, ctrl] = await Promise.all([
+      const [overview, atRiskRes, declines, decisions, health, ctrl, mine] = await Promise.all([
         api.overview(), api.atRisk(), api.declines(), api.decisions(), api.health(), api.control(),
+        api.merchants(),
       ]);
       setControl(ctrl);
+      setBusiness(mine.merchants[0]?.name ?? null);
       setData({
         overview,
         atRisk: atRiskRes.subscriptions,
@@ -391,7 +400,7 @@ export default function App() {
   if (error) {
     return (
       <div className="shell">
-        <Masthead mode={mode} route={route} killed={false} />
+        <Masthead mode={mode} route={route} killed={false} business={business} />
         <div className="state is-error">
           <strong>Could not reach the API</strong>
           {error}
@@ -407,7 +416,7 @@ export default function App() {
   if (route === 'mandate' && param) {
     return (
       <div className="shell">
-        <Masthead mode={mode} route="" killed={control?.kill_switch ?? false} />
+        <Masthead mode={mode} route="" killed={control?.kill_switch ?? false} business={business} />
         <a className="back" href="#/">&larr; All mandates</a>
         <MandateDetail id={param} />
       </div>
@@ -417,22 +426,22 @@ export default function App() {
   if (route === 'trace' && param) {
     return (
       <div className="shell">
-        <Masthead mode={mode} route={route} killed={control?.kill_switch ?? false} />
+        <Masthead mode={mode} route={route} killed={control?.kill_switch ?? false} business={business} />
         <a className="back link" href="#/">← Overview</a>
         <Trace id={param} />
       </div>
     );
   }
 
-  if (route === 'queue' || route === 'merchants' || route === 'reports' || route === 'outreach') {
+  if (route === 'queue' || route === 'account' || route === 'reports' || route === 'outreach') {
     const title = TABS.find((t) => t.route === route)?.label ?? '';
     return (
       <div className="shell">
-        <Masthead mode={mode} route={route} killed={control?.kill_switch ?? false} />
+        <Masthead mode={mode} route={route} killed={control?.kill_switch ?? false} business={business} />
         <div className="section-head"><h2>{title}</h2></div>
         {route === 'queue' && <ChargeQueue />}
         {route === 'outreach' && <Outreach />}
-        {route === 'merchants' && <Merchants />}
+        {route === 'account' && <Account />}
         {route === 'reports' && <Reports slug={param} />}
       </div>
     );
@@ -440,7 +449,7 @@ export default function App() {
 
   return (
     <div className="shell">
-      <Masthead mode={mode} route={route} killed={control?.kill_switch ?? false} />
+      <Masthead mode={mode} route={route} killed={control?.kill_switch ?? false} business={business} />
       {control && <KillSwitch control={control} onChange={() => void load()} />}
       <Headline o={data.overview} />
 

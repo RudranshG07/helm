@@ -422,8 +422,8 @@ export default function Docs() {
                       <td><span className="badge SOFT_LIQUIDITY">{method}</span></td>
                       <td><code>{path}</code></td>
                       <td>
-                        <span className={`badge ${access === 'public' ? 'healthy' : 'HARD_INSTRUMENT'}`}>
-                          {access === 'public' ? 'public' : 'your account'}
+                        <span className={`badge ${access === 'public' ? 'UNKNOWN' : 'at_risk'}`}>
+                          {access === 'public' ? 'anyone' : 'your account'}
                         </span>
                       </td>
                       <td>{note}</td>
@@ -477,7 +477,7 @@ export default function Docs() {
               </div>
             )}
 
-            <div className="paper table-wrap" style={{ marginTop: 18 }}>
+            <div className="paper table-wrap spaced">
               <table>
                 <thead>
                   <tr>
