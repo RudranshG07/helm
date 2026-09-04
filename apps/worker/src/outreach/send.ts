@@ -51,9 +51,21 @@ const TARGET_SQL = `
     CROSS JOIN control_flags c
    WHERE s.id = $1 AND c.id = 1`;
 
+export function publicBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const explicit = env['PUBLIC_BASE_URL']?.trim();
+  if (explicit) return explicit.replace(/\/+$/, '');
+
+  const hosted = env['RENDER_EXTERNAL_URL'] ?? env['FLY_APP_NAME'] ?? env['VERCEL_URL'];
+  if (hosted) {
+    const url = hosted.startsWith('http') ? hosted : `https://${hosted}`;
+    return url.replace(/\/+$/, '');
+  }
+
+  return `http://localhost:${env['PORT'] ?? 3000}`;
+}
+
 function linkFor(token: string): string {
-  const base = process.env['PUBLIC_BASE_URL'] ?? `http://localhost:${process.env['PORT'] ?? 3000}`;
-  return `${base.replace(/\/+$/, '')}/r/${token}`;
+  return `${publicBaseUrl()}/r/${token}`;
 }
 
 

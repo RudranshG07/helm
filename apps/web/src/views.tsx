@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from './api.ts';
 import type { Control, Detail, DecisionTrace, Merchant, OutreachRow, QueueRow } from './api.ts';
 import { Markdown } from './markdown.tsx';
+import { Announce, SkeletonTable } from './skeletons.tsx';
 import { bucketLabel, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
 
 export function ChargeQueue() {
@@ -13,7 +14,7 @@ export function ChargeQueue() {
   }, []);
 
   if (error) return <div className="state is-error"><strong>Could not load the queue</strong>{error}</div>;
-  if (!data) return <div className="skeleton tall" />;
+  if (!data) return <Announce label="Loading"><SkeletonTable /></Announce>;
   if (data.queue.length === 0) {
     return <div className="state"><strong>Nothing to charge</strong>No at-risk mandate has an outstanding invoice.</div>;
   }
@@ -70,7 +71,7 @@ export function MandateDetail({ id }: { id: string }) {
   }, [id]);
 
   if (error) return <div className="state is-error"><strong>Could not load this mandate</strong>{error}</div>;
-  if (!data) return <div className="skeleton tall" />;
+  if (!data) return <Announce label="Loading"><SkeletonTable /></Announce>;
 
   const s = data.subscription as Record<string, string | number | null>;
   const latest = data.health[0];
@@ -241,7 +242,7 @@ export function Reports({ slug }: { slug: string | null }) {
   }, [slug]);
 
   if (error) return <div className="state is-error"><strong>Could not load reports</strong>{error}</div>;
-  if (!list) return <div className="skeleton tall" />;
+  if (!list) return <Announce label="Loading"><SkeletonTable /></Announce>;
   if (list.length === 0) {
     return <div className="state"><strong>No reports generated yet</strong>Run the analysis commands to produce them.</div>;
   }
@@ -261,7 +262,7 @@ export function Reports({ slug }: { slug: string | null }) {
         ))}
       </nav>
       {!slug && <div className="state">Pick a report.</div>}
-      {slug && !markdown && <div className="skeleton tall" />}
+      {slug && !markdown && <Announce label="Loading"><SkeletonTable /></Announce>}
       {markdown && <div className="paper report">{<Markdown source={markdown} />}</div>}
     </>
   );
@@ -270,7 +271,7 @@ export function Reports({ slug }: { slug: string | null }) {
 export function Merchants() {
   const [rows, setRows] = useState<Merchant[] | null>(null);
   useEffect(() => { api.merchants().then((r) => setRows(r.merchants)).catch(() => setRows([])); }, []);
-  if (!rows) return <div className="skeleton tall" />;
+  if (!rows) return <Announce label="Loading"><SkeletonTable /></Announce>;
   if (rows.length === 0) return <div className="state"><strong>No merchants</strong>Import a CSV or connect an account.</div>;
 
   return (
@@ -377,7 +378,7 @@ export function Outreach() {
   }, []);
 
   if (error) return <div className="state is-error"><strong>Could not load outreach</strong>{error}</div>;
-  if (!data) return <div className="skeleton tall" />;
+  if (!data) return <Announce label="Loading"><SkeletonTable /></Announce>;
   if (data.outreach.length === 0) {
     return (
       <div className="state">
@@ -458,7 +459,7 @@ export function Trace({ id }: { id: string }) {
       </div>
     );
   }
-  if (!trace) return <div className="skeleton tall" />;
+  if (!trace) return <Announce label="Tracing the decision"><SkeletonTable rows={7} /></Announce>;
 
   const c = trace.counterfactual;
 

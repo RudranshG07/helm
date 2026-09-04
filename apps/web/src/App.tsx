@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
 import type { AtRiskRow, Control, DeclineRow, DecisionRow, DenialRow, Overview, UnmappedRow } from './api.ts';
 import { ChargeQueue, KillSwitch, MandateDetail, Merchants, Outreach, Reports, Trace } from './views.tsx';
+import { Announce, SkeletonReport } from './skeletons.tsx';
 import { bucketLabel, compactRupees, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
 
 interface Data {
@@ -311,10 +312,7 @@ function Loading() {
   return (
     <div className="shell">
       <Masthead mode={null} route="" killed={false} />
-      <div className="skeleton figure" />
-      <div className="skeleton tall" />
-      <div className="skeleton tall" />
-      <span className="visually-hidden" role="status">Loading</span>
+      <Announce label="Loading the dashboard"><SkeletonReport /></Announce>
     </div>
   );
 }

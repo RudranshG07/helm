@@ -141,6 +141,60 @@ describe('the marketing page and the product share one design system', () => {
   });
 });
 
+describe('content arrives rather than snapping into place', () => {
+  const skeletons = readFileSync(join(web, 'src/skeletons.tsx'), 'utf8');
+  const reveal = readFileSync(join(web, 'src/reveal.ts'), 'utf8');
+
+  it('animates only when the viewer has not asked for less motion', () => {
+    const guarded = /@media \(prefers-reduced-motion: no-preference\) \{([\s\S]*?)\n\}/g;
+    const inside = [...dashboard.matchAll(guarded)].map((m) => m[1]!).join('');
+    expect(inside).toContain('animation: rise');
+    expect(inside).toContain('[data-reveal=');
+  });
+
+  it('shows content immediately when motion is reduced', () => {
+    expect(dashboard).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?data-reveal='pending'[^}]*opacity: 1/);
+  });
+
+  it('reveals long pages on scroll, not all at once on mount', () => {
+    expect(reveal).toContain('IntersectionObserver');
+    for (const page of ['src/proof.tsx', 'src/docs.tsx']) {
+      expect(readFileSync(join(web, page), 'utf8'), page).toContain('useReveal');
+    }
+  });
+
+  it('falls back to visible content where the observer is unavailable', () => {
+    expect(reveal).toContain("'IntersectionObserver' in window");
+    expect(reveal).toMatch(/t\.dataset\['revealed'\] = 'true'/);
+  });
+
+  it('shapes every skeleton like the content it stands in for', () => {
+    for (const shape of ['tile-shape', 'row-shape', 'title-shape', 'line-shape']) {
+      expect(dashboard, shape).toContain(shape);
+    }
+    expect(skeletons).toContain('SkeletonReport');
+    expect(skeletons).toContain('SkeletonTable');
+  });
+
+  it('leaves no generic loading slab behind', () => {
+    for (const page of ['src/App.tsx', 'src/views.tsx', 'src/proof.tsx',
+                        'src/docs.tsx', 'src/onboard.tsx', 'src/authorize.tsx']) {
+      expect(readFileSync(join(web, page), 'utf8'), page).not.toContain('skeleton tall');
+    }
+  });
+
+  it('tells a screen reader what is loading', () => {
+    expect(skeletons).toContain("role=\"status\"");
+    expect(skeletons).toContain('visually-hidden');
+  });
+
+  it('reports progress on work that takes seconds', () => {
+    const proof = readFileSync(join(web, 'src/proof.tsx'), 'utf8');
+    expect(proof).toContain('aria-live="polite"');
+    expect(proof).toMatch(/setStep\(/);
+  });
+});
+
 describe('the landing page works without the scroll choreography', () => {
   const html = readFileSync(join(web, 'landing/index.html'), 'utf8');
 

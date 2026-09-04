@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { rupees } from './format.ts';
+import { Announce, SkeletonReport } from './skeletons.tsx';
 
 type Method = 'connect' | 'upload';
 
@@ -303,10 +304,9 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
 
   if (!report) {
     return (
-      <div className="onboard-progress">
-        <span className="spinner" aria-hidden="true" />
-        Working out what these failures cost you.
-      </div>
+      <Announce label="Working out what these failures cost you">
+        <SkeletonReport />
+      </Announce>
     );
   }
 

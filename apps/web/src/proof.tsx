@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useReveal } from './reveal.ts';
 import { rupees } from './format.ts';
 import type { Counterfactual, DecisionTrace } from './api.ts';
+import { Announce, SkeletonReport } from './skeletons.tsx';
 
 interface ArmRow {
   arm: string;
@@ -117,6 +119,8 @@ export default function Proof() {
   const [data, setData] = useState<ProofData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [step, setStep] = useState<string | null>(null);
+  const shell = useReveal<HTMLDivElement>('.proof-section', [data]);
 
   const load = useCallback(async () => {
     try {
@@ -132,13 +136,30 @@ export default function Proof() {
 
   async function runBatch() {
     setRunning(true);
+    setStep('Seeding 120 failed mandates');
     try {
-      await fetch('/api/authorize/demo', {
+      const started = Date.now();
+      const ticker = window.setInterval(() => {
+        const elapsed = Date.now() - started;
+        if (elapsed > 6000) setStep('Executing charges, exactly once');
+        else if (elapsed > 3000) setStep('Ranking candidate times and applying the rules');
+        else setStep('Seeding 120 failed mandates');
+      }, 900);
+
+      const r = await fetch('/api/authorize/demo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ count: 120 }),
       });
+      window.clearInterval(ticker);
+
+      if (!r.ok) throw new Error(`the batch failed (${r.status})`);
+      setStep('Rebuilding the numbers from the database');
       await load();
+      setStep(null);
+    } catch (e) {
+      setStep(null);
+      setError((e as Error).message);
     } finally {
       setRunning(false);
     }
@@ -151,7 +172,15 @@ export default function Proof() {
       </div>
     );
   }
-  if (!data) return <div className="shell onboard"><div className="skeleton tall" /></div>;
+  if (!data) {
+    return (
+      <div className="shell proof">
+        <Announce label="Building the proof from live data">
+          <SkeletonReport />
+        </Announce>
+      </div>
+    );
+  }
 
   const control = data.arms.find((a) => a.arm === 'control');
   const treatment = data.arms.find((a) => a.arm === 'treatment');
@@ -160,7 +189,7 @@ export default function Proof() {
   const x = data.cross_merchant;
 
   return (
-    <div className="shell proof">
+    <div className="shell proof" ref={shell}>
       <header className="masthead">
         <a className="wordmark" href="/">Helm</a>
         <nav className="site-links" aria-label="Product">
@@ -181,10 +210,11 @@ export default function Proof() {
 
       <div className="proof-actions">
         <button type="button" className="cta" onClick={() => void runBatch()} disabled={running}>
-          {running ? 'Running the batch…' : 'Run the whole thing again'}
+          {running && <span className="spinner" aria-hidden="true" />}
+          {running ? 'Running…' : 'Run the whole thing again'}
         </button>
-        <span className="field-note">
-          Runs 120 mandates through the real decision engine and executor against a simulated gateway.
+        <span className="field-note" role="status" aria-live="polite">
+          {step ?? 'Runs 120 mandates through the real decision engine and executor against a simulated gateway.'}
         </span>
       </div>
 

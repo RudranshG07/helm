@@ -12,6 +12,8 @@ import { reconcileStuck } from './executor.ts';
 import { makeGateway } from './gateway-factory.ts';
 import { ingestBatch } from './ingest.ts';
 import { log } from './log.ts';
+import { runStages } from './stages.ts';
+import type { Stage, StageResult } from './stages.ts';
 
 let running = true;
 
@@ -21,55 +23,25 @@ const outreachProvider = makeOutreachProvider();
 const SWEEP_INTERVAL_MS = Number(process.env['SWEEP_INTERVAL_MS'] ?? 6 * 3600 * 1000);
 let lastSweep: Date | null = null;
 
-async function tick(): Promise<void> {
-  const onboarded = await runOnboardingJobs();
-  if (onboarded > 0) {
-    log.info('onboarding.processed', { jobs: onboarded });
-  }
-
-  const processed = await ingestBatch();
-  await rollupDegradation();
-  if (processed > 0) {
-    log.info('ingest.batch', { processed });
-  }
-  const decided = await decideBatch(agent);
-  if (decided > 0) {
-    log.info('decide.batch', { decided });
-  }
-
-  const spread = await deconflictScheduled();
-  if (spread.moved > 0) {
-    log.info('deconflict.batch', { ...spread });
-  }
-
-  const dispatched = await dispatchDue(gateway);
-  if (dispatched > 0) {
-    log.info('dispatch.batch', { dispatched });
-  }
-
-  const promises = await resolvePromises();
-  if (promises.kept + promises.broken > 0) {
-    log.info('promise.settled', promises);
-  }
-
-  const contacted = await dispatchOutreach(outreachProvider);
-  if (contacted > 0) {
-    log.info('outreach.batch', { contacted });
-  }
-
-  const reconciled = await reconcileStuck(gateway);
-  if (reconciled > 0) {
-    log.info('reconcile.batch', { reconciled });
-  }
-
+async function tick(): Promise<StageResult[]> {
   const now = new Date();
-  if (isSweepDue(lastSweep, now, SWEEP_INTERVAL_MS)) {
-    lastSweep = now;
-    const sweep = await nightlySweep(now);
-    if (sweep.scored > 0) {
-      log.info('nightly.sweep', sweep as unknown as Record<string, unknown>);
-    }
-  }
+  const sweepDue = isSweepDue(lastSweep, now, SWEEP_INTERVAL_MS);
+  if (sweepDue) lastSweep = now;
+
+  const stages: Stage[] = [
+    ['reconcile', () => reconcileStuck(gateway)],
+    ['dispatch', () => dispatchDue(gateway)],
+    ['outreach', () => dispatchOutreach(outreachProvider)],
+    ['onboarding', () => runOnboardingJobs()],
+    ['ingest', () => ingestBatch()],
+    ['decide', () => decideBatch(agent)],
+    ['deconflict', () => deconflictScheduled()],
+    ['promises', () => resolvePromises()],
+    ['degradation', () => rollupDegradation()],
+    ...(sweepDue ? [['sweep', () => nightlySweep(now)] as Stage] : []),
+  ];
+
+  return runStages(stages);
 }
 
 async function main(): Promise<void> {

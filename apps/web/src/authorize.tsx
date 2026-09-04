@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { rupees } from './format.ts';
+import { Announce, SkeletonReport } from './skeletons.tsx';
 
 type RailStatus = 'usable' | 'disabled' | 'not_provisioned' | 'failing';
 
@@ -198,8 +199,9 @@ export default function Authorize() {
   if (!config) {
     return (
       <div className="shell onboard">
-        <div className="skeleton tall" />
-        <span className="visually-hidden">Checking what your Razorpay account can do</span>
+        <Announce label="Checking what your Razorpay account can do">
+          <SkeletonReport />
+        </Announce>
       </div>
     );
   }

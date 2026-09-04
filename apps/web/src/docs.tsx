@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useReveal } from './reveal.ts';
+import { Announce, SkeletonDoc } from './skeletons.tsx';
 
 interface RuleDoc { id: string; refusals: string[]; phase: string }
 interface TaxonomyDoc { reason: string; bucket: string; confidence: string; verified: boolean }
@@ -70,6 +72,7 @@ function Section({ id, title, lede, children }: {
 export default function Docs() {
   const [data, setData] = useState<DocsData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const shell = useReveal<HTMLDivElement>('.doc-section', [data]);
 
   useEffect(() => {
     fetch('/api/docs')
@@ -88,10 +91,18 @@ export default function Docs() {
       </div>
     );
   }
-  if (!data) return <div className="shell onboard"><div className="skeleton tall" /></div>;
+  if (!data) {
+    return (
+      <div className="shell docs">
+        <Announce label="Reading the documentation from source">
+          <SkeletonDoc />
+        </Announce>
+      </div>
+    );
+  }
 
   return (
-    <div className="shell docs">
+    <div className="shell docs" ref={shell}>
       <header className="masthead">
         <a className="wordmark" href="/">Helm</a>
         <nav className="site-links" aria-label="Product">

@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: helm
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @mandate/web build
+    startCommand: node packages/db/migrate.js && node apps/api/src/server.ts
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: RUN_WORKER
+        value: "true"
+      - key: DRY_RUN
+        value: "true"
+      - key: RAZORPAY_MODE
+        value: test
+      - key: POLL_INTERVAL_MS
+        value: "5000"
+      - key: DATABASE_POOL_MAX
+        value: "5"
+      - key: DATABASE_SSL
+        value: "true"
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_MASTER_KEY
+        sync: false
+      - key: KILL_SWITCH_RELEASE_TOKEN
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET_TEST
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AGENT_PROVIDER
+        value: gemini

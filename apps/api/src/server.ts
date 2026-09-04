@@ -60,6 +60,8 @@ app.addContentTypeParser(
   },
 );
 
+let embedded: { stop: () => void; running: () => boolean } | undefined;
+
 app.get('/health', async () => {
   await query('SELECT 1');
   return { ok: true, mode: config.mode, dry_run: config.dryRun };
@@ -96,6 +98,7 @@ if (existsSync(webRoot)) {
 
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ event: 'shutdown', signal });
+  embedded?.stop();
   await app.close();
   await close();
   process.exit(0);
@@ -108,6 +111,12 @@ try {
   await app.listen({ port: config.port, host: config.host });
   if (!config.dryRun) {
     app.log.warn({ event: 'dry_run.disabled' });
+  }
+
+  if (process.env['RUN_WORKER'] === 'true') {
+    const { startEmbeddedWorker } = await import('@mandate/worker/embedded');
+    embedded = startEmbeddedWorker();
+    app.log.info({ event: 'worker.embedded', reason: 'RUN_WORKER=true' });
   }
 } catch (err) {
   app.log.error(err);

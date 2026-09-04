@@ -29,7 +29,13 @@ export interface PlanRequest {
   now: Date;
 }
 
-export async function loadOutcomes(merchantId?: string): Promise<Outcome[]> {
+export const OUTCOME_WINDOW_DAYS = 180;
+export const MODEL_TTL_MS = 5 * 60_000;
+
+export async function loadOutcomes(
+  merchantId?: string,
+  windowDays = OUTCOME_WINDOW_DAYS,
+): Promise<Outcome[]> {
   const { rows } = await query<Outcome>(
     `SELECT
        COALESCE(pa.bucket, 'UNKNOWN') AS bucket,
@@ -51,8 +57,9 @@ export async function loadOutcomes(merchantId?: string): Promise<Outcome[]> {
         ORDER BY p2.attempted_at DESC LIMIT 1
      ) prev ON TRUE
      WHERE pa.status IN ('captured','failed')
+       AND pa.attempted_at > now() - ($2::int * interval '1 day')
        AND ($1::text IS NULL OR s.merchant_id = $1)`,
-    [merchantId ?? null],
+    [merchantId ?? null, windowDays],
   );
   return rows;
 }
@@ -197,4 +204,41 @@ export function explorePlan(plan: Plan, epsilon: number, draw: number): Explored
     explored: !isBest,
     slots_considered: choice.considered,
   };
+}
+
+
+interface CachedModel {
+  key: string;
+  model: SuccessModel;
+  builtAt: number;
+  outcomes: number;
+}
+
+let cache: CachedModel | null = null;
+
+export function invalidateSuccessModel(): void {
+  cache = null;
+}
+
+export interface ModelHandle {
+  model: SuccessModel;
+  outcomes: number;
+  rebuilt: boolean;
+  age_ms: number;
+}
+
+export async function getSuccessModel(
+  merchantId?: string,
+  now = Date.now(),
+  ttlMs = MODEL_TTL_MS,
+): Promise<ModelHandle> {
+  const key = merchantId ?? '*';
+
+  if (cache && cache.key === key && now - cache.builtAt < ttlMs) {
+    return { model: cache.model, outcomes: cache.outcomes, rebuilt: false, age_ms: now - cache.builtAt };
+  }
+
+  const outcomes = await loadOutcomes(merchantId);
+  cache = { key, model: new SuccessModel(outcomes), builtAt: now, outcomes: outcomes.length };
+  return { model: cache.model, outcomes: outcomes.length, rebuilt: true, age_ms: 0 };
 }

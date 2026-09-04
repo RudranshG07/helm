@@ -5,7 +5,6 @@ import {
   OpenAICompatProposalClient,
   PROVIDER_PRESETS,
   keyLooksValid,
-  SuccessModel,
   PDN_MIN_LEAD_MS,
   addMs,
   buildPrompt,
@@ -19,7 +18,7 @@ import { withTransaction } from '@mandate/db';
 import type { PoolClient } from 'pg';
 import { config } from './config.ts';
 import { isDegraded } from './degradation.ts';
-import { buildPlan, explorePlan, loadOutcomes, planToProposal } from './planner.ts';
+import { buildPlan, explorePlan, getSuccessModel, planToProposal } from './planner.ts';
 import { log } from './log.ts';
 
 interface Candidate {
@@ -274,7 +273,11 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
   if (rows.length === 0) return 0;
 
   const killed = await withTransaction(killSwitchEngaged);
-  const model = new SuccessModel(await loadOutcomes());
+  const handle = await getSuccessModel();
+  const model = handle.model;
+  if (handle.rebuilt) {
+    log.info('model.rebuilt', { outcomes: handle.outcomes });
+  }
 
   for (const row of rows) {
     const degraded = await isDegraded(row.issuer, row.method);

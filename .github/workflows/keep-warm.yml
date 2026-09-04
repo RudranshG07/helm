@@ -1,0 +1,20 @@
+name: keep-warm
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the service and confirm it is healthy
+        run: |
+          if [ -z "${{ vars.HELM_URL }}" ]; then
+            echo "HELM_URL repository variable is not set; nothing to ping."
+            exit 0
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 90 "${{ vars.HELM_URL }}/health")
+          echo "health -> $code"
+          test "$code" = "200"
