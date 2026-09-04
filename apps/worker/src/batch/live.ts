@@ -22,6 +22,8 @@ export interface LiveBatchResult {
   policy_refusals: Record<string, number>;
   orders_created: number;
   decisions_recorded: number;
+  pending_cohort: number;
+  merchants: number;
   control_mandates: number;
   control_attempts: number;
   control_recovered_paise: number;
@@ -33,6 +35,7 @@ export interface LiveBatchResult {
 
 export interface LiveBatchOptions {
   count?: number;
+  merchants?: number;
   seed?: number;
   model?: GenerativeModel;
   now?: Date;
@@ -40,6 +43,70 @@ export interface LiveBatchOptions {
 }
 
 const HARD_SHARE = 0.15;
+
+export const DEMO_MERCHANT_NAMES = ['gym', 'tiffin', 'streaming'] as const;
+export const SHARED_CUSTOMER_SHARE = 0.4;
+export const SHARED_POOL_DIVISOR = 6;
+
+export function merchantIdsFor(prefix: string, count?: number): string[] {
+  const n: number = count ?? DEMO_MERCHANT_NAMES.length;
+  return DEMO_MERCHANT_NAMES.slice(0, Math.max(1, n)).map((name) => `${prefix}_${name}`);
+}
+
+export function merchantForIndex(index: number, merchants: string[]): string {
+  return merchants[index % merchants.length]!;
+}
+
+export const PENDING_SHARE = 0.25;
+
+export async function seedPendingCohort(
+  prefix: string,
+  merchants: string[],
+  count: number,
+  now: Date,
+): Promise<number> {
+  if (count <= 0) return 0;
+
+  await withTransaction(async (client) => {
+    for (let i = 0; i < count; i += 1) {
+      const merchantId = merchantForIndex(i, merchants);
+      const id = `${prefix}:pending_${i}`;
+      const customerKey = `ck_shared_${i % Math.max(1, Math.floor(count / 2))}`;
+      const amount = 19900 + (i % 12) * 10000;
+      const cycleStart = new Date(now.getTime() - 2 * 86_400_000);
+      const cycleEnd = new Date(now.getTime() + 26 * 86_400_000);
+
+      await client.query(
+        `INSERT INTO subscription (
+           id, merchant_id, rzp_subscription_id, customer_ref, customer_key, method,
+           amount_paise, status, current_start, current_end, rzp_token_id, rzp_customer_id
+         ) VALUES ($1,$2,$3,$3,$4,'upi_autopay',$5,'active',$6,$7,$8,$9)
+         ON CONFLICT (id) DO NOTHING`,
+        [id, merchantId, `pending_${i}`, customerKey, amount, cycleStart, cycleEnd,
+         `token_pending_${i}`, `cust_pending_${i}`],
+      );
+
+      await client.query(
+        `INSERT INTO payment_attempt (
+           subscription_id, cycle, attempted_at, status, amount_paise,
+           error_reason, error_source, bucket, issuer, initiated_by
+         ) VALUES ($1,$2,$3,'failed',$4,'insufficient_funds','customer','SOFT_LIQUIDITY',$5,'razorpay_default')`,
+        [id, cycleStart, new Date(now.getTime() - 3_600_000), amount,
+         (['HDFC', 'ICIC', 'SBIN', 'UTIB'] as const)[i % 4]],
+      );
+    }
+  });
+
+  log.info('batch.pending_cohort', { prefix, count, merchants: merchants.length });
+  return count;
+}
+
+export function customerKeyFor(index: number, total: number): string {
+  const sharedCount = Math.floor(total * SHARED_CUSTOMER_SHARE);
+  if (index >= sharedCount) return `ck_solo_${index}`;
+  const pool = Math.max(1, Math.floor(sharedCount / SHARED_POOL_DIVISOR));
+  return `ck_shared_${index % pool}`;
+}
 
 export function bucketFor(index: number): {
   bucket: 'SOFT_LIQUIDITY' | 'HARD_INSTRUMENT' | 'HARD_CUSTOMER';
@@ -53,28 +120,36 @@ export function bucketFor(index: number): {
   return { bucket: 'SOFT_LIQUIDITY', reason: 'insufficient_funds', source: 'customer' };
 }
 
-async function seedMandates(merchantId: string, mandates: Mandate[]): Promise<void> {
+async function seedMandates(
+  prefix: string,
+  mandates: Mandate[],
+  merchants: string[],
+): Promise<void> {
   await withTransaction(async (client) => {
-    await client.query(
-      `INSERT INTO merchant (id, name, mode, write_enabled, integration)
-       VALUES ($1,$1,'test',TRUE,'recurring_tokens')
-       ON CONFLICT (id) DO UPDATE SET write_enabled = TRUE`,
-      [merchantId],
-    );
+    for (const merchantId of merchants) {
+      await client.query(
+        `INSERT INTO merchant (id, name, mode, write_enabled, integration, cross_merchant_signals)
+         VALUES ($1,$1,'test',TRUE,'recurring_tokens',TRUE)
+         ON CONFLICT (id) DO UPDATE SET write_enabled = TRUE, cross_merchant_signals = TRUE`,
+        [merchantId],
+      );
+    }
 
-    for (const m of mandates) {
-      const id = `${merchantId}:${m.id}`;
+    for (const [index, m] of mandates.entries()) {
+      const merchantId = merchantForIndex(index, merchants);
+      const id = `${prefix}:${m.id}`;
+      const customerKey = customerKeyFor(index, mandates.length);
       await client.query(
         `INSERT INTO subscription (
-           id, merchant_id, rzp_subscription_id, customer_ref, method, amount_paise,
+           id, merchant_id, rzp_subscription_id, customer_ref, customer_key, method, amount_paise,
            status, current_start, current_end, rzp_token_id, rzp_customer_id
-         ) VALUES ($1,$2,$3,$3,'upi_autopay',$4,'pending',$5,$6,$7,$8)
+         ) VALUES ($1,$2,$3,$3,$9,'upi_autopay',$4,'pending',$5,$6,$7,$8)
          ON CONFLICT (id) DO NOTHING`,
         [id, merchantId, m.id, m.amount_paise, m.cycle_start, m.cycle_end,
-         `token_${m.id}`, `cust_${m.id}`],
+         `token_${m.id}`, `cust_${m.id}`, customerKey],
       );
 
-      const classification = bucketFor(mandates.indexOf(m));
+      const classification = bucketFor(index);
       await client.query(
         `INSERT INTO payment_attempt (
            subscription_id, cycle, attempted_at, status, amount_paise,
@@ -87,19 +162,20 @@ async function seedMandates(merchantId: string, mandates: Mandate[]): Promise<vo
   });
 }
 
-export async function cleanup(merchantId: string): Promise<void> {
-  await query(
-    `DELETE FROM outreach o USING subscription s
-      WHERE o.subscription_id = s.id AND s.merchant_id = $1`, [merchantId]);
-  await query(
-    `DELETE FROM arm_assignment a USING subscription s
-      WHERE a.subscription_id = s.id AND s.merchant_id = $1`, [merchantId]);
-  await query(`DELETE FROM execution_intent WHERE subscription_id LIKE $1`, [`${merchantId}:%`]);
-  await query(`DELETE FROM decision WHERE subscription_id LIKE $1`, [`${merchantId}:%`]);
-  await query(`DELETE FROM mandate_health WHERE subscription_id LIKE $1`, [`${merchantId}:%`]);
-  await query(`DELETE FROM payment_attempt WHERE subscription_id LIKE $1`, [`${merchantId}:%`]);
-  await query(`DELETE FROM subscription WHERE merchant_id = $1`, [merchantId]);
-  await query(`DELETE FROM merchant WHERE id = $1`, [merchantId]);
+export async function cleanup(prefix: string): Promise<void> {
+  const like = `${prefix}:%`;
+  const merchantLike = `${prefix}\\_%`;
+  await query(`DELETE FROM promise_to_pay WHERE subscription_id LIKE $1`, [like]);
+  await query(`DELETE FROM outreach WHERE subscription_id LIKE $1`, [like]);
+  await query(`DELETE FROM arm_assignment WHERE subscription_id LIKE $1`, [like]);
+  await query(`DELETE FROM execution_intent WHERE subscription_id LIKE $1`, [like]);
+  await query(`DELETE FROM decision WHERE subscription_id LIKE $1`, [like]);
+  await query(`DELETE FROM mandate_health WHERE subscription_id LIKE $1`, [like]);
+  await query(`DELETE FROM payment_attempt WHERE subscription_id LIKE $1`, [like]);
+  await query(`DELETE FROM subscription WHERE id LIKE $1`, [like]);
+  await query(`DELETE FROM subscription WHERE merchant_id = $1 OR merchant_id LIKE $2`,
+    [prefix, merchantLike]);
+  await query(`DELETE FROM merchant WHERE id = $1 OR id LIKE $2`, [prefix, merchantLike]);
 }
 
 async function recordDecision(
@@ -182,8 +258,13 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
   const amounts = mandates.map((m) => m.amount_paise).sort((a, b) => a - b);
   const median = amounts[Math.floor(amounts.length / 2)] ?? 0;
 
+  const merchants = merchantIdsFor(merchantId, options.merchants);
+
   await cleanup(merchantId);
-  await seedMandates(merchantId, mandates);
+  await seedMandates(merchantId, mandates, merchants);
+  const pendingCohort = await seedPendingCohort(
+    merchantId, merchants, Math.round(count * PENDING_SHARE), now,
+  );
 
   const gateway = new SimulatedGateway({ seed, model: options.model, medianPaise: median });
   const learned: Outcome[] = [];
@@ -200,6 +281,8 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
     policy_refusals: {},
     orders_created: 0,
     decisions_recorded: 0,
+    pending_cohort: pendingCohort,
+    merchants: merchants.length,
     control_mandates: 0,
     control_attempts: 0,
     control_recovered_paise: 0,

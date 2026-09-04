@@ -8,6 +8,10 @@ const M = 'merchant_model_cache_test';
 const S = `${M}:sub`;
 
 async function reset() {
+  await query(`DELETE FROM mandate_health mh USING subscription s
+                WHERE mh.subscription_id = s.id AND s.merchant_id = $1`, [M]);
+  await query(`DELETE FROM decision d USING subscription s
+                WHERE d.subscription_id = s.id AND s.merchant_id = $1`, [M]);
   await query(`DELETE FROM payment_attempt pa USING subscription s
                 WHERE pa.subscription_id = s.id AND s.merchant_id = $1`, [M]);
   await query(`DELETE FROM subscription WHERE merchant_id = $1`, [M]);
