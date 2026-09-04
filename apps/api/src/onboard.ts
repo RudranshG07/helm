@@ -39,6 +39,8 @@ async function verifyKeys(keyId: string, keySecret: string): Promise<{ ok: true 
   return { ok: true };
 }
 
+const ACKNOWLEDGEMENT = 'I authorise Helm to charge my customers';
+
 export function registerOnboardRoutes(app: FastifyInstance): void {
   app.post<{ Body: { name?: string; key_id?: string; key_secret?: string } }>(
     '/api/onboard/connect',
@@ -197,6 +199,73 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
         app.log.error({ event: 'report.failed', message: (err as Error).message });
         return reply.code(500).send({ error: (err as Error).message });
       }
+    },
+  );
+
+  app.get<{ Params: { id: string } }>('/api/onboard/:id/consent', async (request, reply) => {
+    const { rows } = await query<{
+      write_enabled: boolean; consent_signed_at: Date | null; mode: string;
+      would_charge: number; would_charge_paise: string; refusals: number;
+    }>(
+      `SELECT m.write_enabled, m.consent_signed_at, m.mode,
+              (SELECT count(*)::int FROM execution_intent i
+                 JOIN subscription s2 ON s2.id = i.subscription_id
+                WHERE s2.merchant_id = m.id AND i.dry_run) AS would_charge,
+              (SELECT COALESCE(sum(i.amount_paise),0)::text FROM execution_intent i
+                 JOIN subscription s3 ON s3.id = i.subscription_id
+                WHERE s3.merchant_id = m.id AND i.dry_run) AS would_charge_paise,
+              (SELECT count(*)::int FROM decision d
+                 JOIN subscription s4 ON s4.id = d.subscription_id
+                WHERE s4.merchant_id = m.id AND d.verdict = 'DENY') AS refusals
+         FROM merchant m WHERE m.id = $1`,
+      [request.params.id],
+    );
+
+    const row = rows[0];
+    if (!row) return reply.code(404).send({ error: 'unknown merchant' });
+
+    return {
+      merchant_id: request.params.id,
+      write_enabled: row.write_enabled,
+      consent_signed_at: row.consent_signed_at,
+      mode: row.mode,
+      dry_run_charges: row.would_charge,
+      dry_run_amount_paise: Number(row.would_charge_paise),
+      refusals: row.refusals,
+    };
+  });
+
+  app.post<{ Params: { id: string }; Body: { granted?: boolean; acknowledged?: string } }>(
+    '/api/onboard/:id/consent',
+    async (request, reply) => {
+      const granted = request.body?.granted === true;
+
+      if (granted && request.body?.acknowledged !== ACKNOWLEDGEMENT) {
+        return reply.code(400).send({
+          error: `To grant write access, acknowledge exactly: "${ACKNOWLEDGEMENT}"`,
+        });
+      }
+
+      const { rows } = await query<{ id: string; mode: string }>(
+        `SELECT id, mode FROM merchant WHERE id = $1`, [request.params.id],
+      );
+      if (!rows[0]) return reply.code(404).send({ error: 'unknown merchant' });
+
+      await query(
+        `UPDATE merchant
+            SET write_enabled = $2,
+                consent_signed_at = CASE WHEN $2 THEN clock_timestamp() ELSE NULL END
+          WHERE id = $1`,
+        [request.params.id, granted],
+      );
+
+      app.log.warn({
+        event: granted ? 'merchant.write_granted' : 'merchant.write_revoked',
+        merchant_id: request.params.id,
+        mode: rows[0].mode,
+      });
+
+      return { merchant_id: request.params.id, write_enabled: granted };
     },
   );
 

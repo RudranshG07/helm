@@ -45,3 +45,27 @@ describe('reports are produced by the running instance, not shipped as files', (
     }
   });
 });
+
+describe('the demonstration leaves the system in a state the loop can act on', () => {
+  const authorize = readFileSync(join(root, 'apps/api/src/authorize.ts'), 'utf8');
+
+  const body = authorize.split('\n').filter((l) => !l.startsWith('import')).join('\n');
+
+  it('scores the population it seeds, instead of waiting hours for a sweep', () => {
+    const seed = body.indexOf('await runLiveBatch(');
+    const score = body.indexOf('nightlySweep(new Date())');
+    expect(seed, 'no batch call').toBeGreaterThan(-1);
+    expect(score, 'the sweep must follow the seed').toBeGreaterThan(seed);
+  });
+
+  it('clears the previous run so the reported number describes one batch', () => {
+    const clear = body.indexOf('await cleanup(DEMO_MERCHANT_ID)');
+    const seed = body.indexOf('await runLiveBatch(');
+    expect(clear, 'no cleanup call').toBeGreaterThan(-1);
+    expect(clear, 'cleanup must precede seeding').toBeLessThan(seed);
+  });
+
+  it('reports what it scored, so the caller knows the loop has work', () => {
+    expect(authorize).toMatch(/scored: sweep\.scored/);
+  });
+});

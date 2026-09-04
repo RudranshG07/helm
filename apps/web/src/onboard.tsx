@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { rupees } from './format.ts';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ist, rupees } from './format.ts';
 import { Announce, SkeletonReport } from './skeletons.tsx';
 
 type Method = 'connect' | 'upload';
@@ -242,6 +242,127 @@ export default function Onboard() {
   );
 }
 
+interface Consent {
+  merchant_id: string;
+  write_enabled: boolean;
+  consent_signed_at: string | null;
+  mode: string;
+  dry_run_charges: number;
+  dry_run_amount_paise: number;
+  refusals: number;
+}
+
+const ACKNOWLEDGEMENT = 'I authorise Helm to charge my customers';
+
+function GrantAccess({ merchantId }: { merchantId: string }) {
+  const [state, setState] = useState<Consent | null>(null);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const r = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/consent`);
+    if (r.ok) setState(await r.json() as Consent);
+  }, [merchantId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function submit(granted: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/consent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ granted, acknowledged: granted ? typed.trim() : undefined }),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error ?? 'That did not work.');
+      setTyped('');
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!state) return null;
+
+  if (state.write_enabled) {
+    return (
+      <section className="consent paper is-live">
+        <span className="eyebrow">Write access</span>
+        <h3>Helm can charge your customers</h3>
+        <p>
+          Granted {state.consent_signed_at ? ist(state.consent_signed_at) : 'just now'}. Every charge
+          stays inside the same sixteen rules, and the kill switch on the dashboard stops everything
+          instantly.
+        </p>
+        <button type="button" className="cta ghost" onClick={() => void submit(false)} disabled={busy}>
+          {busy ? 'Revoking…' : 'Revoke write access'}
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="consent paper">
+      <span className="eyebrow">Write access</span>
+      <h3>Helm has not charged anyone, and will not until you say so.</h3>
+      <p>
+        It has been running in dry run against your account, recording the action it would take
+        without taking it. Review that before deciding.
+      </p>
+
+      <dl className="report-rows">
+        <div>
+          <dt>Charges it would have made</dt>
+          <dd>{state.dry_run_charges}</dd>
+        </div>
+        <div>
+          <dt>Money that would have moved</dt>
+          <dd>{rupees(state.dry_run_amount_paise)}</dd>
+        </div>
+        <div>
+          <dt>Actions the rules refused</dt>
+          <dd>{state.refusals}</dd>
+        </div>
+        <div>
+          <dt>Mode</dt>
+          <dd>{state.mode}</dd>
+        </div>
+      </dl>
+
+      <label className="consent-label" htmlFor="ack">
+        To grant write access, type <code>{ACKNOWLEDGEMENT}</code>
+      </label>
+      <input
+        id="ack"
+        type="text"
+        value={typed}
+        onChange={(e) => setTyped(e.target.value)}
+        placeholder={ACKNOWLEDGEMENT}
+        autoComplete="off"
+      />
+
+      {error && <div className="form-error" role="alert">{error}</div>}
+
+      <button
+        type="button"
+        className="cta"
+        onClick={() => void submit(true)}
+        disabled={busy || typed.trim() !== ACKNOWLEDGEMENT}
+      >
+        {busy ? 'Granting…' : 'Grant write access'}
+      </button>
+      <p className="field-note">
+        You can revoke this at any time, and the kill switch halts every charge instantly.
+      </p>
+    </section>
+  );
+}
+
 interface Report {
   has_history: boolean;
   window_days: number;
@@ -404,6 +525,8 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
       {report.caveat && (
         <p className="report-caveat" role="note">{report.caveat}</p>
       )}
+
+      <GrantAccess merchantId={merchantId} />
 
       <div className="report-actions">
         <a className="cta" href="/dashboard">Open the dashboard</a>

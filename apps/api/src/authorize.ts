@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, withTransaction } from '@mandate/db';
 import { cleanup, runLiveBatch } from '@mandate/worker/batch/live';
+import { nightlySweep } from '@mandate/worker/nightly';
 import { probeAccount } from './account.ts';
 
 interface RzpOrder { id: string; amount: number; status: string }
@@ -244,8 +245,21 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
         merchantId: DEMO_MERCHANT_ID,
         now: anchored,
       });
-      app.log.info({ event: 'authorize.demo_batch', count, merchant_id: DEMO_MERCHANT_ID });
-      return { ...result, simulated: true, anchored_at: anchored.toISOString() };
+      const sweep = await nightlySweep(new Date());
+
+      app.log.info({
+        event: 'authorize.demo_batch',
+        count,
+        merchant_id: DEMO_MERCHANT_ID,
+        scored: sweep.scored,
+      });
+
+      return {
+        ...result,
+        simulated: true,
+        anchored_at: anchored.toISOString(),
+        scored: sweep.scored,
+      };
     } catch (err) {
       app.log.error({ event: 'authorize.demo_failed', message: (err as Error).message });
       return reply.code(500).send({ error: (err as Error).message });
