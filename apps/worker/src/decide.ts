@@ -104,6 +104,12 @@ LEFT JOIN LATERAL (
 ) a ON TRUE
 WHERE h.risk_band <> 'healthy'
   AND NOT EXISTS (
+    SELECT 1 FROM payment_attempt paid
+     WHERE paid.subscription_id = s.id
+       AND paid.cycle = COALESCE(s.current_start, to_timestamp(0))
+       AND paid.status = 'captured'
+  )
+  AND NOT EXISTS (
     SELECT 1 FROM decision d
      WHERE d.subscription_id = s.id
        AND d.cycle = COALESCE(s.current_start, to_timestamp(0))

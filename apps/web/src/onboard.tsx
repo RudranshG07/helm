@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ist, rupees } from './format.ts';
+import { actAsOperator } from './operator.ts';
 import { Announce, SkeletonReport } from './skeletons.tsx';
 
 type Method = 'connect' | 'upload';
@@ -271,9 +272,8 @@ function GrantAccess({ merchantId }: { merchantId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/consent`, {
+      const r = await actAsOperator(`/api/onboard/${encodeURIComponent(merchantId)}/consent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ granted, acknowledged: granted ? typed.trim() : undefined }),
       });
       const body = await r.json();

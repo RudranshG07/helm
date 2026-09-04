@@ -1,3 +1,4 @@
+import { requireOperator } from './guard.ts';
 import type { FastifyInstance } from 'fastify';
 import { query, withTransaction } from '@mandate/db';
 import { cleanup, runLiveBatch } from '@mandate/worker/batch/live';
@@ -234,6 +235,7 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
   );
 
   app.post<{ Body: { count?: number } }>('/api/authorize/demo', async (request, reply) => {
+    if (!(await requireOperator(request, reply))) return reply;
     const count = Math.min(Math.max(Number(request.body?.count ?? 40), 1), 200);
 
     try {

@@ -1,3 +1,4 @@
+import { requireOperator } from './guard.ts';
 import { buildRecoveryReport } from '@mandate/worker/report/recovery';
 import type { FastifyInstance } from 'fastify';
 import {
@@ -238,6 +239,7 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
   app.post<{ Params: { id: string }; Body: { granted?: boolean; acknowledged?: string } }>(
     '/api/onboard/:id/consent',
     async (request, reply) => {
+      if (!(await requireOperator(request, reply))) return reply;
       const granted = request.body?.granted === true;
 
       if (granted && request.body?.acknowledged !== ACKNOWLEDGEMENT) {

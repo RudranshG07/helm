@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useReveal } from './reveal.ts';
+import { actAsOperator } from './operator.ts';
 import { rupees } from './format.ts';
 import type { Counterfactual, DecisionTrace } from './api.ts';
 import { Announce, SkeletonReport } from './skeletons.tsx';
@@ -146,9 +147,8 @@ export default function Proof() {
         else setStep('Clearing the last run and seeding 60 mandates');
       }, 900);
 
-      const r = await fetch('/api/authorize/demo', {
+      const r = await actAsOperator('/api/authorize/demo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ count: 60 }),
       });
       window.clearInterval(ticker);

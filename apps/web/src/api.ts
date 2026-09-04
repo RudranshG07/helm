@@ -1,3 +1,4 @@
+import { actAsOperator } from './operator.ts';
 export interface Overview {
   at_risk_count: number;
   critical_count: number;
@@ -155,11 +156,7 @@ export interface Detail {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const res = await actAsOperator(path, { method: 'POST', body: JSON.stringify(body) });
   const parsed = (await res.json()) as T & { error?: string };
   if (!res.ok) throw new Error(parsed.error ?? `${path} responded ${res.status}`);
   return parsed;

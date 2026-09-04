@@ -79,11 +79,11 @@ async function claim(client: PoolClient, key: string, req: OutreachRequest, targ
   const { rowCount } = await client.query(
     `INSERT INTO outreach (
        decision_id, subscription_id, cycle, idempotency_key, token,
-       channel, status, recipient_masked, expires_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,'queued',$7,$8)
+       channel, status, recipient_masked, expires_at, language
+     ) VALUES ($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9)
      ON CONFLICT (idempotency_key) DO NOTHING`,
     [req.decision_id, req.subscription_id, req.cycle, key, token,
-     channel, maskRecipient(recipient), expires],
+     channel, maskRecipient(recipient), expires, resolveLanguage(target.contact_language)],
   );
 
   return rowCount === 1 ? { token, channel, recipient } : null;
@@ -138,8 +138,6 @@ export async function sendOutreach(
     amount_paise: Number(target.amount_paise),
     link,
   }, language);
-
-  await query(`UPDATE outreach SET language = $2 WHERE idempotency_key = $1`, [key, language]);
 
   const result = await provider.send({
     channel,

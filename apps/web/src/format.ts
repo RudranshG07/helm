@@ -1,10 +1,9 @@
 export function rupees(paise: number): string {
-  const value = paise / 100;
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    maximumFractionDigits: value >= 1000 ? 0 : 2,
-  }).format(value);
+    maximumFractionDigits: 0,
+  }).format(paise / 100);
 }
 
 export function compactRupees(paise: number): string {

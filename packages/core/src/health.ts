@@ -14,6 +14,7 @@ export interface HealthInput {
   issuer_degraded: boolean;
   method: Method;
   last_bucket: Bucket | null;
+  cycle_already_paid?: boolean;
 }
 
 export interface HealthScore {
@@ -58,6 +59,18 @@ function expiryWeight(days: number | null): number {
 }
 
 export function score(input: HealthInput): HealthScore {
+  if (input.cycle_already_paid === true) {
+    return {
+      risk_score: 0,
+      risk_band: 'healthy',
+      attempts_remaining: Math.max(
+        0, NPCI_ATTEMPT_BUDGET - Math.max(0, safeInt(input.attempts_used_this_cycle)),
+      ),
+      days_to_expiry: null,
+      contributions: { cycle_already_paid: 0 },
+    };
+  }
+
   const consecutive = Math.max(0, safeInt(input.consecutive_failures));
   const used = Math.max(0, safeInt(input.attempts_used_this_cycle));
   const attempts_remaining = Math.max(0, NPCI_ATTEMPT_BUDGET - used);

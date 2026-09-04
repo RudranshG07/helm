@@ -24,6 +24,7 @@ export interface LiveBatchResult {
   decisions_recorded: number;
   pending_cohort: number;
   merchants: number;
+  escalations: number;
   control_mandates: number;
   control_attempts: number;
   control_recovered_paise: number;
@@ -142,11 +143,14 @@ async function seedMandates(
       await client.query(
         `INSERT INTO subscription (
            id, merchant_id, rzp_subscription_id, customer_ref, customer_key, method, amount_paise,
-           status, current_start, current_end, rzp_token_id, rzp_customer_id
-         ) VALUES ($1,$2,$3,$3,$9,'upi_autopay',$4,'pending',$5,$6,$7,$8)
+           status, current_start, current_end, rzp_token_id, rzp_customer_id,
+           contact_email, contact_language
+         ) VALUES ($1,$2,$3,$3,$9,'upi_autopay',$4,'pending',$5,$6,$7,$8,$10,$11)
          ON CONFLICT (id) DO NOTHING`,
         [id, merchantId, m.id, m.amount_paise, m.cycle_start, m.cycle_end,
-         `token_${m.id}`, `cust_${m.id}`, customerKey],
+         `token_${m.id}`, `cust_${m.id}`, customerKey,
+         `${m.id}@example.test`,
+         (['en', 'hinglish', 'hi'] as const)[index % 3]],
       );
 
       const classification = bucketFor(index);
@@ -282,6 +286,7 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
     orders_created: 0,
     decisions_recorded: 0,
     pending_cohort: pendingCohort,
+    escalations: 0,
     merchants: merchants.length,
     control_mandates: 0,
     control_attempts: 0,
@@ -325,14 +330,21 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
           attempts_remaining: NPCI_ATTEMPT_BUDGET - attemptsUsed,
           days_to_halt: Math.max(0, Math.floor((m.cycle_end.getTime() - cursor.getTime()) / 86_400_000)),
           last_failure_at: m.first_failure_at,
-          reauth_available: false,
+          reauth_available: classified.bucket === 'HARD_INSTRUMENT',
           remaining_cycles: 6,
           now: cursor,
         },
         model,
       );
 
-      const proposal: Proposal = planToProposal(plan, subscriptionId);
+      const proposal: Proposal = classified.bucket === 'HARD_INSTRUMENT'
+        ? {
+            subscription_id: subscriptionId,
+            action: 'REAUTH_OUTREACH',
+            reason: 'The instrument is dead, so no retry can succeed. Ask for a new mandate.',
+            confidence: 1,
+          }
+        : planToProposal(plan, subscriptionId);
       const ctx = await liveContext(subscriptionId, m, attemptsUsed, cursor, classified.bucket);
       const verdict = evaluate(proposal, ctx);
 
@@ -357,6 +369,24 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
         cursor = new Date(cursor.getTime() + 86_400_000);
         if (cursor >= m.cycle_end) break;
         continue;
+      }
+
+      if (proposal.action === 'REAUTH_OUTREACH') {
+        await recordDecision(subscriptionId, m.cycle_start, proposal, verdict, {
+          bucket: classified.bucket,
+          issuer: m.issuer,
+          method: 'upi_autopay',
+          amount_paise: m.amount_paise,
+          attempts_remaining: NPCI_ATTEMPT_BUDGET - attemptsUsed,
+          cycle_start: m.cycle_start.toISOString(),
+          cycle_end: m.cycle_end.toISOString(),
+          now: cursor.toISOString(),
+          arm: 'treatment',
+          source: 'batch',
+        });
+        result.decisions_recorded += 1;
+        result.escalations += 1;
+        break;
       }
 
       const target = verdict.scheduled_for ?? proposal.scheduled_for;

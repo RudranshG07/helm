@@ -12,6 +12,7 @@ interface Candidate {
   cycle: Date;
   attempts_used: number;
   consecutive_failures: number;
+  cycle_already_paid: boolean;
   soft_rate: string;
   last_bucket: Bucket | null;
   issuer: string | null;
@@ -26,10 +27,16 @@ SELECT
     WHERE subscription_id = s.id
       AND cycle = COALESCE(s.current_start, to_timestamp(0))
       AND counts_against_budget) AS attempts_used,
-  (SELECT count(*)::int FROM payment_attempt
-    WHERE subscription_id = s.id
-      AND cycle = COALESCE(s.current_start, to_timestamp(0))
-      AND status = 'failed') AS consecutive_failures,
+    (SELECT count(*)::int FROM payment_attempt f
+      WHERE f.subscription_id = s.id
+        AND f.cycle = COALESCE(s.current_start, to_timestamp(0))
+        AND f.status = 'failed'
+        AND f.attempted_at > COALESCE((
+          SELECT max(c.attempted_at) FROM payment_attempt c
+           WHERE c.subscription_id = s.id
+             AND c.cycle = COALESCE(s.current_start, to_timestamp(0))
+             AND c.status = 'captured'
+        ), to_timestamp(0))) AS consecutive_failures,
   COALESCE((SELECT avg(CASE WHEN bucket LIKE 'SOFT%' THEN 1 ELSE 0 END)
               FROM payment_attempt WHERE subscription_id = s.id AND status = 'failed'), 0) AS soft_rate,
   (SELECT bucket FROM payment_attempt
@@ -38,6 +45,10 @@ SELECT
   (SELECT issuer FROM payment_attempt
     WHERE subscription_id = s.id
     ORDER BY attempted_at DESC LIMIT 1) AS issuer,
+    EXISTS (SELECT 1 FROM payment_attempt p
+             WHERE p.subscription_id = s.id
+               AND p.cycle = COALESCE(s.current_start, to_timestamp(0))
+               AND p.status = 'captured') AS cycle_already_paid,
   (SELECT max(scored_at) FROM mandate_health WHERE subscription_id = s.id) AS last_scored_at
 FROM subscription s
 WHERE s.status NOT IN ('halted','cancelled','completed','expired')
@@ -96,6 +107,7 @@ export async function nightlySweep(
       issuer_degraded: await isDegraded(row.issuer, row.method),
       method: row.method,
       last_bucket: row.last_bucket,
+      cycle_already_paid: row.cycle_already_paid,
     });
 
     await query(

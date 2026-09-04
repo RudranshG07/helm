@@ -1,3 +1,4 @@
+import { requireOperator } from './guard.ts';
 import { buildReport, reportIndex } from '@mandate/worker/reports/live';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
@@ -31,6 +32,7 @@ export function registerControlRoutes(app: FastifyInstance): void {
   app.post<{ Body: { engaged?: boolean; reason?: string; token?: string } }>(
     '/api/control/kill-switch',
     async (request, reply) => {
+      if (!(await requireOperator(request, reply))) return reply;
       const engaged = request.body?.engaged !== false;
 
       if (!engaged) {
