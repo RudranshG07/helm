@@ -433,14 +433,18 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
 
   if (!report.has_history) {
     return (
-      <div className="onboard-progress is-done">
-        <strong>Connected, nothing failing</strong>
-        <p>
-          No failed mandates in the last {report.window_days} days. Helm will keep watching and
-          tell you the moment one starts to slip.
-        </p>
-        <a className="cta" href="/dashboard">Open the dashboard</a>
-      </div>
+      <>
+        <div className="onboard-progress is-done">
+          <strong>Connected, nothing failing</strong>
+          <p>
+            No failed mandates in the last {report.window_days} days, so there is nothing to
+            recover yet. Helm will keep watching and tell you the moment one starts to slip.
+          </p>
+          <a className="cta" href="/dashboard">Open the dashboard</a>
+        </div>
+
+        <GrantAccess merchantId={merchantId} />
+      </>
     );
   }
 

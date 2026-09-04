@@ -74,7 +74,12 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
       const check = await verifyKeys(keyId, keySecret);
       if (!check.ok) return reply.code(400).send({ error: check.problem });
 
-      const id = slug(name);
+      const print = fingerprint(keyId);
+      const { rows: existing } = await query<{ id: string }>(
+        `SELECT id FROM merchant WHERE key_fingerprint = $1`, [print],
+      );
+      const resumed = existing.length > 0;
+      const id = existing[0]?.id ?? slug(name);
 
       await withTransaction(async (client) => {
         await client.query(
@@ -100,7 +105,7 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
       });
 
       app.log.info({ event: 'onboard.connected', merchant_id: id, mode: shape.mode });
-      return { merchant_id: id, state: 'backfilling', mode: shape.mode };
+      return { merchant_id: id, state: 'backfilling', mode: shape.mode, resumed };
     },
   );
 
