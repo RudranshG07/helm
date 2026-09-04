@@ -28,6 +28,7 @@ const ACTION_MEANING: Record<string, string> = {
 const SECTIONS = [
   { id: 'constraint', label: 'The constraint' },
   { id: 'loop', label: 'The loop' },
+  { id: 'architecture', label: 'Architecture' },
   { id: 'taxonomy', label: 'Decline taxonomy' },
   { id: 'actions', label: 'Interventions' },
   { id: 'rules', label: 'Policy rules' },
@@ -168,6 +169,92 @@ export default function Docs() {
               <li><strong>Bound.</strong> The policy engine checks the proposal against every rule below. The first refusal wins, and refusals are logged as loudly as approvals.</li>
               <li><strong>Execute.</strong> An intent row is written before the gateway is called, so a crash can never produce a second charge.</li>
             </ol>
+          </Section>
+
+          <Section
+            id="architecture"
+            title="Architecture, and why the boundaries are where they are"
+            lede="Three seams carry the weight: the model may not move money, the executor may not charge twice, and analytics may not starve safety."
+          >
+            <pre className="doc-diagram" aria-label="System diagram">{` Razorpay ──webhook──▶ INGEST ──▶ payment_attempt
+    ▲                              │
+    │                              ▼
+    │                         CLASSIFY      reason → bucket, unknown stays UNKNOWN
+    │                              ▼
+    │                          SCORE        health per mandate, every term shown
+    │                              ▼
+    │                          DECIDE       success model · liquidity · budget DP
+    │                              │                    │
+    │                              │                    ▼
+    │                              │               AGENT (LLM)
+    │                              │        proposes one action and a reason
+    │                              ▼                    │
+    │                       POLICY ENGINE ◀─────────────┘
+    │                  16 rules · first refusal wins
+    │                              │
+    │                    ALLOW ────┴──── DENY ──▶ recorded, with the rule
+    │                      ▼
+    │                 DE-CONFLICT           spread debits hitting one account
+    │                      ▼
+    └──────────────── EXECUTOR              intent → charge → reconcile
+                           ▼
+                       AUDIT ──▶ dashboard · proof · per-decision trace`}</pre>
+
+            <ul className="doc-list">
+              <li>
+                <code>pure policy</code>
+                <span>
+                  The engine takes a proposal and a context and returns a verdict. No clock, no
+                  database, no network. Every rule is testable alone, and a verdict is reproducible
+                  from its inputs.
+                </span>
+              </li>
+              <li>
+                <code>two phases</code>
+                <span>
+                  Rules run when an attempt is proposed and again at execution, because a mandate can
+                  be revoked in between. Timing rules run only in the first phase; re-applying a
+                  notice floor later would refuse every attempt that correctly waited for it.
+                </span>
+              </li>
+              <li>
+                <code>gateway is an interface</code>
+                <span>
+                  Three implementations: real Razorpay, a stub for crash tests, and a seeded
+                  simulator for measurement. The batch and the live loop run the same executor, which
+                  is what makes a measured number mean anything.
+                </span>
+              </li>
+              <li>
+                <code>bounded learning</code>
+                <span>
+                  The success model reads a 180-day window and is cached per merchant scope. Rebuilt
+                  every tick it cost 140ms and 5.7MB of churn at 50,000 attempts, scaling linearly.
+                </span>
+              </li>
+              <li>
+                <code>attribution</code>
+                <span>
+                  Every attempt records who made it. Without that, both arms look identical in the
+                  data and the headline number means nothing.
+                </span>
+              </li>
+              <li>
+                <code>independent arms</code>
+                <span>
+                  Each simulated outcome derives from the seed combined with its own receipt. With a
+                  shared random stream the control arm's results depended on what the treatment arm
+                  decided, which quietly invalidated the comparison.
+                </span>
+              </li>
+              <li>
+                <code>one process</code>
+                <span>
+                  The worker runs inside the web server, started after the port binds and stopped on
+                  shutdown, so the whole system fits a free tier. Postgres is in Mumbai for residency.
+                </span>
+              </li>
+            </ul>
           </Section>
 
           <Section

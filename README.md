@@ -2,7 +2,10 @@
 
 **An agent that decides how to spend a failing mandate's last attempts.**
 
-Live: **https://helm-xuxb.onrender.com** · [The proof](https://helm-xuxb.onrender.com/proof) · [How it works](https://helm-xuxb.onrender.com/docs)
+Live: **https://helm-xuxb.onrender.com**
+
+[The proof](https://helm-xuxb.onrender.com/proof) — the claim, defended, re-runnable from the page
+[The architecture](https://helm-xuxb.onrender.com/docs#architecture) — read out of the running source, so it cannot go stale
 
 Razorpay AI Buildathon · Track 03, AI Revenue Recovery
 

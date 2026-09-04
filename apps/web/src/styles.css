@@ -1581,3 +1581,17 @@ tr.is-ours td { background: rgba(47, 125, 91, 0.09); }
 .docs .tile {
   padding: 20px 22px;
 }
+
+.doc-diagram {
+  margin: 0 0 20px;
+  padding: 20px 22px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-paper-05);
+  border: 1px solid var(--line-paper);
+  color: var(--paper-faint);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+}

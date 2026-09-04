@@ -51,9 +51,24 @@ export interface CrossMerchant {
   uncontested_label: string;
 }
 
+export interface RealAccount {
+  connected: boolean;
+  merchants: number;
+  mandates: number;
+  attempts: number;
+  failures: number;
+  recovered_paise: number;
+  lost_paise: number;
+  decline_codes: { reason: string | null; bucket: string; source: string; n: number }[];
+  live_mandates: number;
+  events_via_webhook: number;
+  attempts_via_backfill: number;
+}
+
 export interface Proof {
   generated_at: string;
   scale: ProofScale;
+  real: RealAccount;
   arms: ArmTotals[];
   edge_per_attempt_pct: number | null;
   allowed_trace: DecisionTrace | null;
@@ -159,6 +174,48 @@ export async function buildProof(): Promise<Proof> {
     earliest: r.scheduled_for, latest: r.scheduled_for,
   }));
 
+  const realTotals = await one<Record<string, string>>(`
+    SELECT (SELECT count(*) FROM merchant WHERE rzp_key_id IS NOT NULL)::text AS merchants,
+           (SELECT count(*) FROM subscription s
+              JOIN merchant m ON m.id = s.merchant_id
+             WHERE m.rzp_key_id IS NOT NULL)::text AS mandates,
+           (SELECT count(*) FROM payment_attempt pa
+              JOIN subscription s2 ON s2.id = pa.subscription_id
+              JOIN merchant m2 ON m2.id = s2.merchant_id
+             WHERE m2.rzp_key_id IS NOT NULL)::text AS attempts,
+           (SELECT count(*) FROM payment_attempt pa3
+              JOIN subscription s3 ON s3.id = pa3.subscription_id
+              JOIN merchant m3 ON m3.id = s3.merchant_id
+             WHERE m3.rzp_key_id IS NOT NULL AND pa3.status = 'failed')::text AS failures,
+           (SELECT COALESCE(sum(pa4.amount_paise),0) FROM payment_attempt pa4
+              JOIN subscription s4 ON s4.id = pa4.subscription_id
+              JOIN merchant m4 ON m4.id = s4.merchant_id
+             WHERE m4.rzp_key_id IS NOT NULL AND pa4.status = 'captured')::text AS recovered,
+           (SELECT COALESCE(sum(pa5.amount_paise),0) FROM payment_attempt pa5
+              JOIN subscription s5 ON s5.id = pa5.subscription_id
+              JOIN merchant m5 ON m5.id = s5.merchant_id
+             WHERE m5.rzp_key_id IS NOT NULL AND pa5.status = 'failed')::text AS lost,
+           (SELECT count(*) FROM subscription s6
+              JOIN merchant m6 ON m6.id = s6.merchant_id
+             WHERE m6.rzp_key_id IS NOT NULL AND s6.rzp_token_id IS NOT NULL)::text AS live_mandates,
+           (SELECT count(*) FROM payment_attempt pa7
+              JOIN subscription s7 ON s7.id = pa7.subscription_id
+              JOIN merchant m7 ON m7.id = s7.merchant_id
+             WHERE m7.rzp_key_id IS NOT NULL AND pa7.source = 'webhook')::text AS via_webhook,
+           (SELECT count(*) FROM payment_attempt pa8
+              JOIN subscription s8 ON s8.id = pa8.subscription_id
+              JOIN merchant m8 ON m8.id = s8.merchant_id
+             WHERE m8.rzp_key_id IS NOT NULL AND pa8.source = 'backfill')::text AS via_backfill`);
+
+  const { rows: realCodes } = await query<{ reason: string | null; bucket: string; source: string; n: number }>(`
+    SELECT pa.error_reason AS reason, COALESCE(pa.bucket,'UNKNOWN') AS bucket,
+           pa.source, count(*)::int AS n
+      FROM payment_attempt pa
+      JOIN subscription s ON s.id = pa.subscription_id
+      JOIN merchant m ON m.id = s.merchant_id
+     WHERE m.rzp_key_id IS NOT NULL AND pa.status = 'failed'
+     GROUP BY 1,2,3 ORDER BY n DESC LIMIT 8`);
+
   const contention = await analyzeContention();
 
   const gaps = SCENARIOS.filter((s) => s.outcome === 'UNHANDLED');
@@ -174,6 +231,19 @@ export async function buildProof(): Promise<Proof> {
       executions: Number(scale?.['executions'] ?? 0),
       outreach: Number(scale?.['outreach'] ?? 0),
       promises: Number(scale?.['promises'] ?? 0),
+    },
+    real: {
+      connected: Number(realTotals?.['merchants'] ?? 0) > 0,
+      merchants: Number(realTotals?.['merchants'] ?? 0),
+      mandates: Number(realTotals?.['mandates'] ?? 0),
+      attempts: Number(realTotals?.['attempts'] ?? 0),
+      failures: Number(realTotals?.['failures'] ?? 0),
+      recovered_paise: Number(realTotals?.['recovered'] ?? 0),
+      lost_paise: Number(realTotals?.['lost'] ?? 0),
+      decline_codes: realCodes,
+      live_mandates: Number(realTotals?.['live_mandates'] ?? 0),
+      events_via_webhook: Number(realTotals?.['via_webhook'] ?? 0),
+      attempts_via_backfill: Number(realTotals?.['via_backfill'] ?? 0),
     },
     arms,
     edge_per_attempt_pct: edge,

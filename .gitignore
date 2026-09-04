@@ -20,7 +20,6 @@ dist/
 /docs/
 *.md
 !README.md
-!ARCHITECTURE.md
 
 .DS_Store
 coverage/

@@ -15,6 +15,20 @@ interface ArmRow {
   mandates_halted: number;
 }
 
+interface RealAccount {
+  connected: boolean;
+  merchants: number;
+  mandates: number;
+  attempts: number;
+  failures: number;
+  recovered_paise: number;
+  lost_paise: number;
+  decline_codes: { reason: string | null; bucket: string; source: string; n: number }[];
+  live_mandates: number;
+  events_via_webhook: number;
+  attempts_via_backfill: number;
+}
+
 interface CrossMerchant {
   merchants_sharing_signals: number;
   customers_seen_by_more_than_one: number;
@@ -30,6 +44,7 @@ interface CrossMerchant {
 interface ProofData {
   generated_at: string;
   scale: Record<string, number>;
+  real: RealAccount;
   arms: ArmRow[];
   edge_per_attempt_pct: number | null;
   allowed_trace: DecisionTrace | null;
@@ -187,6 +202,7 @@ export default function Proof() {
   const h = data.honesty;
   const o = data.outreach;
   const x = data.cross_merchant;
+  const real = data.real;
 
   return (
     <div className="shell proof" ref={shell}>
@@ -218,11 +234,72 @@ export default function Proof() {
         </span>
       </div>
 
+      {real.connected && (
+        <Section
+          n={1}
+          eyebrow="On a real Razorpay account"
+          title="This is what Helm has actually seen."
+          lede="A live Razorpay account, connected with read-only keys. These payments really failed, the decline codes are the ones Razorpay returned, and the classification is what Helm made of them."
+        >
+          <div className="tiles">
+            <div className="tile paper">
+              <span className="eyebrow">Real failed payments</span>
+              <strong className="num">{real.failures}</strong>
+              <span className="hint">{rupees(real.lost_paise)} that did not arrive</span>
+            </div>
+            <div className="tile paper">
+              <span className="eyebrow">Live mandates</span>
+              <strong className="num">{real.live_mandates}</strong>
+              <span className="hint">authorised on UPI Autopay, chargeable</span>
+            </div>
+            <div className="tile paper">
+              <span className="eyebrow">How it arrived</span>
+              <strong className="num">{real.attempts_via_backfill + real.events_via_webhook}</strong>
+              <span className="hint">
+                {real.attempts_via_backfill} backfilled · {real.events_via_webhook} by signed webhook
+              </span>
+            </div>
+          </div>
+
+          {real.decline_codes.length > 0 && (
+            <div className="paper table-wrap" style={{ marginTop: 18 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Razorpay said</th>
+                    <th scope="col">Helm classified it</th>
+                    <th scope="col">Arrived by</th>
+                    <th scope="col" className="num">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {real.decline_codes.map((c) => (
+                    <tr key={`${c.reason}-${c.bucket}-${c.source}`}>
+                      <td><code>{c.reason ?? 'no reason given'}</code></td>
+                      <td><span className={`badge ${c.bucket}`}>{c.bucket.replace(/_/g, ' ').toLowerCase()}</span></td>
+                      <td><span className="ref">{c.source}</span></td>
+                      <td className="num">{c.n}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="proof-callout">
+            <strong>{real.failures} failures is not enough to measure a policy against.</strong>{' '}
+            It is enough to prove the integration is real: genuine credentials, genuine decline codes,
+            a signed webhook, and a mandate that can actually be charged. The batch below exists
+            because a policy needs volume to be measured, and this account does not have it yet.
+          </p>
+        </Section>
+      )}
+
       <Section
-        n={1}
-        eyebrow="The claim"
+        n={real.connected ? 2 : 1}
+        eyebrow="Measured at volume, against a simulated gateway"
         title="Two arms, one population, recorded assignment"
-        lede="Every mandate is assigned to control or treatment by a stable hash, written to the database once, and never changed. Control gets the fixed T+1/T+2/T+3 schedule. Treatment gets Helm."
+        lede="The account above has four failures, which cannot separate two policies. So the same engine and the same executor run against a seeded gateway, where outcomes are drawn from a stated model rather than from a bank. Every rupee below is simulated. The decisions behind them are not."
       >
         {control && treatment ? (
           <>
@@ -269,7 +346,7 @@ export default function Proof() {
 
       {data.allowed_trace && (
         <Section
-          n={2}
+          n={real.connected ? 3 : 2}
           eyebrow="One decision, defended"
           title="Why this charge was timed the way it was"
           lede="Aggregates are easy to fake. This is a single decision, from the decline code through the model and the allocator to the rule that let it run."
@@ -286,7 +363,7 @@ export default function Proof() {
 
       {data.refused_trace && (
         <Section
-          n={3}
+          n={real.connected ? 4 : 3}
           eyebrow="One decision, refused"
           title="The agent proposes. The policy engine disposes."
           lede="The model is never allowed to move money. Sixteen deterministic rules run after it, first refusal wins, and a refusal is logged as loudly as an approval."
@@ -313,7 +390,7 @@ export default function Proof() {
       )}
 
       <Section
-        n={4}
+        n={real.connected ? 5 : 4}
         eyebrow="When no retry can work"
         title="Escalate to the customer, within the rules"
         lede="A dead card cannot be retried into life. Helm asks the customer to re-authorise, and lets them name a date instead of failing again."
@@ -343,7 +420,7 @@ export default function Proof() {
       </Section>
 
       <Section
-        n={5}
+        n={real.connected ? 6 : 5}
         eyebrow="Only possible across merchants"
         title="Two merchants should not fight over the same account on the same morning."
         lede="One merchant cannot see this. Helm sees every consenting merchant's schedule at once, so when several would debit the same customer within half an hour it spreads them instead of letting them knock each other out."
@@ -385,7 +462,7 @@ export default function Proof() {
       </Section>
 
       <Section
-        n={6}
+        n={real.connected ? 7 : 6}
         eyebrow="What we do not know"
         title="The honesty metrics"
         lede="Anything that would flatter the numbers is reported here instead."
