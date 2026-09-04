@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
+import { NotConnected, captureSessionFromUrl, forgetSession } from './session.ts';
 import type { AtRiskRow, Control, DeclineRow, DecisionRow, DenialRow, Overview, UnmappedRow } from './api.ts';
 import { ChargeQueue, KillSwitch, MandateDetail, Merchants, Outreach, Reports, Trace } from './views.tsx';
 import { Announce, SkeletonReport } from './skeletons.tsx';
@@ -317,7 +318,35 @@ function Loading() {
   );
 }
 
+function NotConnectedScreen() {
+  return (
+    <div className="shell">
+      <header className="masthead">
+        <a className="wordmark" href="/">Helm</a>
+        <nav className="site-links" aria-label="Product">
+          <a className="site-link" href="/proof">Proof</a>
+          <a className="site-link" href="/docs">Docs</a>
+          <a className="site-link" href="/onboard">Connect</a>
+        </nav>
+      </header>
+      <div className="state">
+        <strong>This dashboard is private</strong>
+        It shows one business at a time: your mandates, your customers, your decisions. Nobody
+        reaches it without the link issued to your account.
+        <br />
+        <a className="cta" href="/onboard">Connect your Razorpay account</a>
+        <br />
+        <span className="hint">
+          Already connected? Open the dashboard link you were given when you connected. Connecting
+          again with the same key issues a fresh one.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [session, setSession] = useState<string | null>(() => captureSessionFromUrl());
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<string | null>(null);
@@ -341,15 +370,23 @@ export default function App() {
       setMode(health.mode);
       setError(null);
     } catch (err) {
+      if (err instanceof NotConnected) {
+        forgetSession();
+        setSession(null);
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
     }
   }, []);
 
   useEffect(() => {
+    if (session === null) return;
     void load();
     const timer = setInterval(() => void load(), 15_000);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, session]);
+
+  if (session === null) return <NotConnectedScreen />;
 
   if (error) {
     return (

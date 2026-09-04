@@ -13,41 +13,48 @@ export interface Overview {
 }
 
 const LATEST_HEALTH = `
-  SELECT DISTINCT ON (subscription_id) *
-    FROM mandate_health
-   ORDER BY subscription_id, scored_at DESC, id DESC
+  SELECT DISTINCT ON (h.subscription_id) h.*
+    FROM mandate_health h
+    JOIN subscription s ON s.id = h.subscription_id
+   WHERE s.merchant_id = $1
+   ORDER BY h.subscription_id, h.scored_at DESC, h.id DESC
 `;
 
-export async function overview(): Promise<Overview> {
-  const { rows } = await query<Overview>(`
-    WITH latest AS (${LATEST_HEALTH}),
-    bands AS (
-      SELECT
-        count(*) FILTER (WHERE risk_band = 'at_risk')::int  AS at_risk_count,
-        count(*) FILTER (WHERE risk_band = 'critical')::int AS critical_count,
-        count(*) FILTER (WHERE risk_band = 'healthy')::int  AS healthy_count,
-        COALESCE(sum(amount_at_risk_paise), 0)::bigint      AS amount_at_risk_paise
-      FROM latest
-    ),
-    subs AS (
-      SELECT count(*) FILTER (WHERE status = 'halted')::int AS halted_count FROM subscription
-    ),
-    attempts AS (
-      SELECT
-        count(*)::int                                     AS attempts_last_30d,
-        count(*) FILTER (WHERE status = 'failed')::int    AS failed_last_30d
-      FROM payment_attempt
-      WHERE attempted_at > now() - interval '30 days'
-    ),
-    unmapped AS (
-      SELECT
-        count(DISTINCT error_reason)::int AS unmapped_codes,
-        count(*)::int                     AS unmapped_attempts
-      FROM payment_attempt
-      WHERE COALESCE(bucket, 'UNKNOWN') = 'UNKNOWN' AND status = 'failed'
-    )
-    SELECT * FROM bands, subs, attempts, unmapped
-  `);
+export async function overview(merchant: string): Promise<Overview> {
+  const { rows } = await query<Overview>(
+    `WITH latest AS (${LATEST_HEALTH}),
+     bands AS (
+       SELECT
+         count(*) FILTER (WHERE risk_band = 'at_risk')::int  AS at_risk_count,
+         count(*) FILTER (WHERE risk_band = 'critical')::int AS critical_count,
+         count(*) FILTER (WHERE risk_band = 'healthy')::int  AS healthy_count,
+         COALESCE(sum(amount_at_risk_paise), 0)::bigint      AS amount_at_risk_paise
+       FROM latest
+     ),
+     subs AS (
+       SELECT count(*) FILTER (WHERE status = 'halted')::int AS halted_count
+         FROM subscription WHERE merchant_id = $1
+     ),
+     attempts AS (
+       SELECT
+         count(*)::int                                     AS attempts_last_30d,
+         count(*) FILTER (WHERE pa.status = 'failed')::int  AS failed_last_30d
+       FROM payment_attempt pa
+       JOIN subscription s ON s.id = pa.subscription_id
+      WHERE s.merchant_id = $1 AND pa.attempted_at > now() - interval '30 days'
+     ),
+     unmapped AS (
+       SELECT
+         count(DISTINCT pa.error_reason)::int AS unmapped_codes,
+         count(*)::int                        AS unmapped_attempts
+       FROM payment_attempt pa
+       JOIN subscription s ON s.id = pa.subscription_id
+      WHERE s.merchant_id = $1
+        AND COALESCE(pa.bucket, 'UNKNOWN') = 'UNKNOWN' AND pa.status = 'failed'
+     )
+     SELECT * FROM bands, subs, attempts, unmapped`,
+    [merchant],
+  );
   return rows[0]!;
 }
 
@@ -67,7 +74,7 @@ export interface AtRiskRow {
   scored_at: string;
 }
 
-export async function atRisk(limit = 100): Promise<AtRiskRow[]> {
+export async function atRisk(merchant: string, limit = 100): Promise<AtRiskRow[]> {
   const { rows } = await query<AtRiskRow>(
     `WITH latest AS (${LATEST_HEALTH})
      SELECT
@@ -86,15 +93,20 @@ export async function atRisk(limit = 100): Promise<AtRiskRow[]> {
      ORDER BY
        CASE h.risk_band WHEN 'critical' THEN 0 ELSE 1 END,
        s.amount_paise DESC
-     LIMIT $1`,
-    [limit],
+     LIMIT $2`,
+    [merchant, limit],
   );
   return rows;
 }
 
-export async function subscriptionDetail(id: string) {
-  const [sub, attempts, decisions, health] = await Promise.all([
-    query(`SELECT * FROM subscription WHERE id = $1`, [id]),
+export async function subscriptionDetail(merchant: string, id: string) {
+  const sub = await query(
+    `SELECT * FROM subscription WHERE id = $1 AND merchant_id = $2`,
+    [id, merchant],
+  );
+  if (!sub.rows[0]) return null;
+
+  const [attempts, decisions, health, intents] = await Promise.all([
     query(
       `SELECT rzp_payment_id, attempted_at, status, amount_paise, error_reason,
               error_source, error_step, COALESCE(bucket, 'UNKNOWN') AS bucket,
@@ -118,17 +130,14 @@ export async function subscriptionDetail(id: string) {
         ORDER BY scored_at DESC, id DESC LIMIT 20`,
       [id],
     ),
+    query(
+      `SELECT idempotency_key, state, attempt_number, amount_paise, scheduled_for,
+              dry_run, amount_mismatch, created_at, settled_at, last_error
+         FROM execution_intent WHERE subscription_id = $1
+        ORDER BY created_at DESC LIMIT 50`,
+      [id],
+    ),
   ]);
-
-  if (!sub.rows[0]) return null;
-
-  const intents = await query(
-    `SELECT idempotency_key, state, attempt_number, amount_paise, scheduled_for,
-            dry_run, amount_mismatch, created_at, settled_at, last_error
-       FROM execution_intent WHERE subscription_id = $1
-      ORDER BY created_at DESC LIMIT 50`,
-    [id],
-  );
 
   return {
     subscription: sub.rows[0],
@@ -139,55 +148,62 @@ export async function subscriptionDetail(id: string) {
   };
 }
 
-export async function unmappedCodes() {
+export async function unmappedCodes(merchant: string) {
   const { rows } = await query(
-    `SELECT error_reason, error_source, error_step, method,
+    `SELECT pa.error_reason, pa.error_source, pa.error_step, s.method,
             count(*)::int AS attempts,
             sum(pa.amount_paise)::bigint AS amount_paise,
-            max(attempted_at) AS last_seen
+            max(pa.attempted_at) AS last_seen
        FROM payment_attempt pa
        JOIN subscription s ON s.id = pa.subscription_id
-      WHERE COALESCE(pa.bucket, 'UNKNOWN') = 'UNKNOWN' AND pa.status = 'failed'
+      WHERE s.merchant_id = $1
+        AND COALESCE(pa.bucket, 'UNKNOWN') = 'UNKNOWN' AND pa.status = 'failed'
       GROUP BY 1,2,3,4
       ORDER BY attempts DESC`,
+    [merchant],
   );
   return rows;
 }
 
-export async function declineDistribution() {
+export async function declineDistribution(merchant: string) {
   const { rows } = await query(
     `SELECT COALESCE(pa.bucket, 'UNKNOWN') AS bucket, pa.error_reason, pa.error_source, s.method,
             count(*)::int AS attempts,
             sum(pa.amount_paise)::bigint AS amount_paise
        FROM payment_attempt pa
        JOIN subscription s ON s.id = pa.subscription_id
-      WHERE pa.status = 'failed'
+      WHERE s.merchant_id = $1 AND pa.status = 'failed'
       GROUP BY 1,2,3,4
       ORDER BY attempts DESC`,
+    [merchant],
   );
   return rows;
 }
 
-export async function decisionLog(limit = 200) {
+export async function decisionLog(merchant: string, limit = 200) {
   const { rows } = await query(
     `SELECT d.id, d.subscription_id, d.proposed_action, d.proposed_by, d.verdict,
             d.rule_id, d.scheduled_for, d.proposed_for, d.rationale, d.explanation,
             d.created_at, d.executed_at, d.outcome
        FROM decision d
+       JOIN subscription s ON s.id = d.subscription_id
+      WHERE s.merchant_id = $1
       ORDER BY d.created_at DESC, d.id DESC
-      LIMIT $1`,
-    [limit],
+      LIMIT $2`,
+    [merchant, limit],
   );
   return rows;
 }
 
-export async function denialsByRule() {
+export async function denialsByRule(merchant: string) {
   const { rows } = await query(
-    `SELECT rule_id, verdict, count(*)::int AS count
-       FROM decision
-      WHERE verdict IN ('DENY','DEFER')
+    `SELECT d.rule_id, d.verdict, count(*)::int AS count
+       FROM decision d
+       JOIN subscription s ON s.id = d.subscription_id
+      WHERE s.merchant_id = $1 AND d.verdict IN ('DENY','DEFER')
       GROUP BY 1,2
       ORDER BY count DESC`,
+    [merchant],
   );
   return rows;
 }
@@ -209,7 +225,7 @@ export interface OutreachRow {
   expires_at: Date;
 }
 
-export async function outreachLog(limit: number): Promise<OutreachRow[]> {
+export async function outreachLog(merchant: string, limit: number): Promise<OutreachRow[]> {
   const { rows } = await query<OutreachRow>(
     `SELECT o.id::text AS id, o.subscription_id, s.customer_ref, s.merchant_id,
             s.amount_paise::bigint AS amount_paise,
@@ -217,16 +233,33 @@ export async function outreachLog(limit: number): Promise<OutreachRow[]> {
             o.created_at, o.sent_at, o.viewed_at, o.converted_at, o.expires_at
        FROM outreach o
        JOIN subscription s ON s.id = o.subscription_id
+      WHERE s.merchant_id = $1
       ORDER BY o.created_at DESC
-      LIMIT $1`,
-    [limit],
+      LIMIT $2`,
+    [merchant, limit],
   );
   return rows.map((r) => ({ ...r, amount_paise: Number(r.amount_paise) }));
 }
 
-export async function outreachFunnel(): Promise<Record<string, number>> {
+export async function outreachFunnel(merchant: string): Promise<Record<string, number>> {
   const { rows } = await query<{ status: string; n: number }>(
-    `SELECT status, count(*)::int AS n FROM outreach GROUP BY status`,
+    `SELECT o.status, count(*)::int AS n
+       FROM outreach o
+       JOIN subscription s ON s.id = o.subscription_id
+      WHERE s.merchant_id = $1
+      GROUP BY o.status`,
+    [merchant],
   );
   return Object.fromEntries(rows.map((r) => [r.status, r.n]));
+}
+
+export async function decisionBelongsTo(merchant: string, decisionId: string): Promise<boolean> {
+  const { rows } = await query<{ ok: boolean }>(
+    `SELECT true AS ok
+       FROM decision d
+       JOIN subscription s ON s.id = d.subscription_id
+      WHERE d.id = $2::bigint AND s.merchant_id = $1`,
+    [merchant, decisionId],
+  );
+  return rows.length > 0;
 }

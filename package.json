@@ -18,7 +18,7 @@
     "stop": "docker compose down",
     "build": "pnpm --filter @mandate/web build",
     "dev": "bash scripts/start.sh",
-    "db:test": "docker compose exec -T db psql -U mandate -d postgres -c \"SELECT 1 FROM pg_database WHERE datname='mandate_rescue_test'\" | grep -q 1 || docker compose exec -T db psql -U mandate -d postgres -c 'CREATE DATABASE mandate_rescue_test OWNER mandate'; DATABASE_URL=postgres://mandate:mandate@127.0.0.1:5433/mandate_rescue_test node packages/db/migrate.js"
+    "db:test": "bash scripts/test-db.sh"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

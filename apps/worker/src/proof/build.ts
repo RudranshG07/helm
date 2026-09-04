@@ -117,6 +117,9 @@ export async function buildProof(): Promise<Proof> {
        AND EXISTS (SELECT 1 FROM payment_attempt pa
                     WHERE pa.subscription_id = d.subscription_id
                       AND pa.cycle = d.cycle AND pa.status = 'failed')
+       AND EXISTS (SELECT 1 FROM subscription s
+                    JOIN merchant m ON m.id = s.merchant_id
+                   WHERE s.id = d.subscription_id AND m.synthetic)
      ORDER BY (d.outcome = 'recovered') DESC NULLS LAST, d.id DESC
      LIMIT 1`);
 
@@ -127,6 +130,9 @@ export async function buildProof(): Promise<Proof> {
        AND EXISTS (SELECT 1 FROM payment_attempt pa
                     WHERE pa.subscription_id = d.subscription_id
                       AND pa.cycle = d.cycle AND pa.status = 'failed')
+       AND EXISTS (SELECT 1 FROM subscription s
+                    JOIN merchant m ON m.id = s.merchant_id
+                   WHERE s.id = d.subscription_id AND m.synthetic)
      ORDER BY (d.rule_id = 'R-HARD') DESC, d.id DESC
      LIMIT 1`);
 

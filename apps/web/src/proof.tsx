@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useReveal } from './reveal.ts';
-import { actAsOperator } from './operator.ts';
 import { rupees } from './format.ts';
-import type { Counterfactual, DecisionTrace } from './api.ts';
+import { api } from './api.ts';
+import type { Counterfactual, DecisionTrace, PublicTotals } from './api.ts';
 import { Announce, SkeletonReport } from './skeletons.tsx';
 
 interface ArmRow {
@@ -131,11 +131,43 @@ function TraceStrip({ trace }: { trace: DecisionTrace }) {
   );
 }
 
+function PublicLedger() {
+  const [totals, setTotals] = useState<PublicTotals | null>(null);
+
+  useEffect(() => {
+    api.publicTotals().then(setTotals).catch(() => setTotals(null));
+  }, []);
+
+  if (!totals) return null;
+
+  return (
+    <div className="tiles public-ledger">
+      <div className="tile paper">
+        <span className="eyebrow">Recovered for merchants, all time</span>
+        <strong className="num">{rupees(totals.recovered_paise)}</strong>
+        <span className="hint">
+          {totals.recovered_count === 0
+            ? 'No real customer has been charged yet. Write access is off until a merchant turns it on.'
+            : `${totals.recovered_count} payments, from ${totals.attempts_made} attempts Helm chose to make`}
+        </span>
+      </div>
+      <div className="tile paper">
+        <span className="eyebrow">Businesses connected</span>
+        <strong className="num">{totals.merchants_connected}</strong>
+        <span className="hint">{totals.mandates_watched} mandates watched</span>
+      </div>
+      <div className="tile paper">
+        <span className="eyebrow">Decisions recorded</span>
+        <strong className="num">{totals.decisions_made}</strong>
+        <span className="hint">{totals.decisions_denied} of them refusals</span>
+      </div>
+    </div>
+  );
+}
+
 export default function Proof() {
   const [data, setData] = useState<ProofData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-  const [step, setStep] = useState<string | null>(null);
   const shell = useReveal<HTMLDivElement>('.proof-section', [data]);
 
   const load = useCallback(async () => {
@@ -149,36 +181,6 @@ export default function Proof() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
-
-  async function runBatch() {
-    setRunning(true);
-    setStep('Clearing the last run and seeding 60 mandates');
-    try {
-      const started = Date.now();
-      const ticker = window.setInterval(() => {
-        const elapsed = Date.now() - started;
-        if (elapsed > 6000) setStep('Executing charges, exactly once');
-        else if (elapsed > 3000) setStep('Ranking candidate times and applying the rules');
-        else setStep('Clearing the last run and seeding 60 mandates');
-      }, 900);
-
-      const r = await actAsOperator('/api/authorize/demo', {
-        method: 'POST',
-        body: JSON.stringify({ count: 60 }),
-      });
-      window.clearInterval(ticker);
-
-      if (!r.ok) throw new Error(`the batch failed (${r.status})`);
-      setStep('Rebuilding the numbers from the database');
-      await load();
-      setStep(null);
-    } catch (e) {
-      setStep(null);
-      setError((e as Error).message);
-    } finally {
-      setRunning(false);
-    }
-  }
 
   if (error) {
     return (
@@ -224,15 +226,7 @@ export default function Proof() {
         and every decision below is recorded, replayable, and argued against the default schedule.
       </p>
 
-      <div className="proof-actions">
-        <button type="button" className="cta" onClick={() => void runBatch()} disabled={running}>
-          {running && <span className="spinner" aria-hidden="true" />}
-          {running ? 'Running…' : 'Run the whole thing again'}
-        </button>
-        <span className="field-note" role="status" aria-live="polite">
-          {step ?? 'Clears the last run, then puts 60 mandates through the real decision engine and executor against a simulated gateway, anchored to 09:00 IST today so repeated runs are comparable.'}
-        </span>
-      </div>
+      <PublicLedger />
 
       {real.connected && (
         <Section

@@ -40,23 +40,25 @@ const SECTIONS = [
   { id: 'gaps', label: 'What we do not know' },
 ];
 
-const ROUTES = [
-  ['GET', '/api/proof', 'Everything the proof page shows, assembled from the database.'],
-  ['GET', '/api/docs', 'This page, extracted from the source at request time.'],
-  ['GET', '/api/overview', 'Revenue at risk, risk bands, unmapped decline counts.'],
-  ['GET', '/api/at-risk', 'Mandates with a failure in the open cycle.'],
-  ['GET', '/api/decisions', 'The decision log with denials grouped by rule.'],
-  ['GET', '/api/decisions/:id/trace', 'One decision, from decline to outcome, with its counterfactual.'],
-  ['GET', '/api/declines', 'Decline distribution and the codes still unmapped.'],
-  ['GET', '/api/charge-queue', 'What would be charged next, and why.'],
-  ['GET', '/api/outreach', 'Outreach funnel and every message with its status.'],
-  ['GET', '/api/onboard/:id/report', 'A merchant’s recovery report, in rupees.'],
-  ['GET', '/api/authorize/account', 'What the connected Razorpay account can actually do.'],
-  ['POST', '/api/onboard/connect', 'Store read-only keys and backfill payment history.'],
-  ['POST', '/api/control', 'Engage or release the kill switch.'],
-  ['POST', '/webhooks/razorpay', 'Signed Razorpay events.'],
-  ['GET', '/r/:token', 'The customer re-authorisation page.'],
+const ROUTES: [string, string, string, 'public' | 'merchant'][] = [
+  ['GET', '/api/public', 'Totals across every connected business. No names, no customers, no per-account figures.', 'public'],
+  ['GET', '/api/proof', 'Everything the proof page shows. Decision traces are drawn only from mandates Helm generated itself.', 'public'],
+  ['GET', '/api/docs', 'This page, extracted from the source at request time.', 'public'],
+  ['GET', '/api/overview', 'Revenue at risk, risk bands, unmapped decline counts.', 'merchant'],
+  ['GET', '/api/at-risk', 'Mandates with a failure in the open cycle.', 'merchant'],
+  ['GET', '/api/decisions', 'The decision log with denials grouped by rule.', 'merchant'],
+  ['GET', '/api/decisions/:id/trace', 'One decision, from decline to outcome, with its counterfactual.', 'merchant'],
+  ['GET', '/api/declines', 'Decline distribution and the codes still unmapped.', 'merchant'],
+  ['GET', '/api/charge-queue', 'What would be charged next, and why.', 'merchant'],
+  ['GET', '/api/outreach', 'Outreach funnel and every message with its status.', 'merchant'],
+  ['GET', '/api/onboard/:id/report', 'A merchant\u2019s recovery report, in rupees.', 'merchant'],
+  ['GET', '/api/authorize/account', 'What the connected Razorpay account can actually do.', 'merchant'],
+  ['POST', '/api/onboard/connect', 'Store read-only keys, backfill payment history, and issue that merchant a dashboard token.', 'public'],
+  ['POST', '/api/control', 'Engage or release the kill switch.', 'merchant'],
+  ['POST', '/webhooks/razorpay', 'Signed Razorpay events.', 'public'],
+  ['GET', '/r/:token', 'The customer re-authorisation page.', 'public'],
 ];
+
 
 function Section({ id, title, lede, children }: {
   id: string; title: string; lede?: string; children: React.ReactNode;
@@ -402,7 +404,7 @@ export default function Docs() {
           <Section
             id="api"
             title="API"
-            lede="Everything the interface shows is available directly."
+            lede="Everything the interface shows is available directly. Public routes carry aggregates and synthetic mandates only; the rest need the session token issued when you connect your Razorpay account, and answer for that account alone."
           >
             <div className="paper table-wrap">
               <table>
@@ -410,14 +412,20 @@ export default function Docs() {
                   <tr>
                     <th scope="col">Method</th>
                     <th scope="col">Path</th>
+                    <th scope="col">Who can read it</th>
                     <th scope="col">Returns</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {ROUTES.map(([method, path, note]) => (
+                  {ROUTES.map(([method, path, note, access]) => (
                     <tr key={path}>
                       <td><span className="badge SOFT_LIQUIDITY">{method}</span></td>
                       <td><code>{path}</code></td>
+                      <td>
+                        <span className={`badge ${access === 'public' ? 'healthy' : 'HARD_INSTRUMENT'}`}>
+                          {access === 'public' ? 'public' : 'your account'}
+                        </span>
+                      </td>
                       <td>{note}</td>
                     </tr>
                   ))}

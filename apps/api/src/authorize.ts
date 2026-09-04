@@ -1,4 +1,4 @@
-import { requireOperator } from './guard.ts';
+import { requireMerchant } from './session.ts';
 import type { FastifyInstance } from 'fastify';
 import { query, withTransaction } from '@mandate/db';
 import { cleanup, runLiveBatch } from '@mandate/worker/batch/live';
@@ -199,9 +199,10 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
 
       await withTransaction(async (client) => {
         await client.query(
-          `INSERT INTO merchant (id, name, mode, integration, onboarding_state, cross_merchant_signals, write_enabled)
-           VALUES ($1,'Helm test account','test','recurring_tokens','ready',TRUE,FALSE)
-           ON CONFLICT (id) DO NOTHING`,
+          `INSERT INTO merchant (id, name, mode, integration, onboarding_state,
+                                 cross_merchant_signals, write_enabled, synthetic)
+           VALUES ($1,'Helm test account','test','recurring_tokens','ready',TRUE,FALSE,TRUE)
+           ON CONFLICT (id) DO UPDATE SET synthetic = TRUE`,
           [MERCHANT_ID],
         );
         await client.query(
@@ -235,7 +236,7 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
   );
 
   app.post<{ Body: { count?: number } }>('/api/authorize/demo', async (request, reply) => {
-    if (!(await requireOperator(request, reply))) return reply;
+    if ((await requireMerchant(request, reply)) === null) return reply;
     const count = Math.min(Math.max(Number(request.body?.count ?? 40), 1), 200);
 
     try {

@@ -129,9 +129,11 @@ async function seedMandates(
   await withTransaction(async (client) => {
     for (const merchantId of merchants) {
       await client.query(
-        `INSERT INTO merchant (id, name, mode, write_enabled, integration, cross_merchant_signals)
-         VALUES ($1,$1,'test',TRUE,'recurring_tokens',TRUE)
-         ON CONFLICT (id) DO UPDATE SET write_enabled = TRUE, cross_merchant_signals = TRUE`,
+        `INSERT INTO merchant (id, name, mode, write_enabled, integration,
+                               cross_merchant_signals, synthetic)
+         VALUES ($1,$1,'test',TRUE,'recurring_tokens',TRUE,TRUE)
+         ON CONFLICT (id) DO UPDATE SET write_enabled = TRUE, cross_merchant_signals = TRUE,
+                                        synthetic = TRUE`,
         [merchantId],
       );
     }

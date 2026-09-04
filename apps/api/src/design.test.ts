@@ -189,9 +189,14 @@ describe('content arrives rather than snapping into place', () => {
   });
 
   it('reports progress on work that takes seconds', () => {
+    const onboard = readFileSync(join(web, 'src/onboard.tsx'), 'utf8');
+    expect(onboard).toContain('aria-live="polite"');
+    expect(onboard).toMatch(/mandates and \{status\.attempts\} payments read so far/);
+  });
+
+  it('offers a stranger no way to manufacture mandates', () => {
     const proof = readFileSync(join(web, 'src/proof.tsx'), 'utf8');
-    expect(proof).toContain('aria-live="polite"');
-    expect(proof).toMatch(/setStep\(/);
+    expect(proof).not.toMatch(/runBatch|authorize\/demo/);
   });
 });
 

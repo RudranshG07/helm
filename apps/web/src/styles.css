@@ -1595,3 +1595,25 @@ tr.is-ours td { background: rgba(47, 125, 91, 0.09); }
   overflow-x: auto;
   white-space: pre;
 }
+
+.private-link {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  margin-top: 16px; padding: 20px 22px;
+  background: var(--paper); color: var(--ink);
+  border-left: 4px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+.private-link strong { font-size: 15px; }
+.private-link p { margin: 0; max-width: 60ch; font-size: 14px; line-height: 1.5; }
+.private-link-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  width: 100%; margin-top: 4px;
+}
+.private-link-row code {
+  flex: 1 1 22ch; min-width: 0;
+  overflow-x: auto; white-space: nowrap;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+}
+
+.public-ledger { margin-bottom: 28px; }

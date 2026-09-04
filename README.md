@@ -124,10 +124,10 @@ Reported here rather than left for a reviewer to find.
 - **The taxonomy is unverified.** Seven decline reasons are mapped; **zero** are confirmed by a retry outcome. A wrong bucket spends a real attempt on a mandate that cannot be saved.
 - **The liquidity model has never seen a real payment history.** Circular clustering is unit-tested on synthetic day-of-month arrays. Whether it beats a fixed schedule on real customers is unmeasured.
 - **A single batch is not a stable estimate.** The treatment arm updates its model as it runs, so a poor start makes it pessimistic about the rest of the population. Measured across seven times of day on identical inputs, it spends 31–36 attempts in business hours and 1 at 05:30 IST.
-- **No tenant isolation.** Every reader sees every merchant. Money-moving actions are gated behind an operator passphrase, but that is an operator control, not multi-tenancy.
+- **The dashboard link is a bearer credential.** Connecting a working Razorpay key issues a session token, and every read is scoped to the merchant it resolves to — but there is no email login, no second factor and no revocation list. Whoever holds the link holds that dashboard until the merchant connects again and rotates it.
 - **Onboarding asks for API keys.** Razorpay partner OAuth is the correct answer and needs approval we could not obtain. A CSV import path exists for merchants who will not hand over keys.
 
-The full catalogue — **260 scenarios, 252 handled, 5 detected, 3 unhandled** — is generated from the code at [`/docs`](https://helm-xuxb.onrender.com/docs), including the ones we still get wrong, in our own words.
+The full catalogue — **270 scenarios, 263 handled, 5 detected, 2 unhandled** — is generated from the code at [`/docs`](https://helm-xuxb.onrender.com/docs), including the ones we still get wrong, in our own words.
 
 ---
 
@@ -136,7 +136,7 @@ The full catalogue — **260 scenarios, 252 handled, 5 detected, 3 unhandled** �
 ```bash
 pnpm install
 pnpm dev          # database, migrations, web build, worker, api on :3000
-pnpm test         # 948 tests, against an isolated database
+pnpm test         # 955 tests, against an isolated database
 ```
 
 Deployed as a single service: the worker runs inside the web process, so it fits a free tier. Postgres is in Mumbai for data residency.
@@ -152,10 +152,10 @@ connect   /onboard     dash    /dashboard mandates  /authorize
 
 | | |
 |---|---|
-| Tests | 948 |
-| Adversarial scenarios | 260 — 252 handled, 5 detected, 3 unhandled |
+| Tests | 955 |
+| Adversarial scenarios | 270 — 263 handled, 5 detected, 2 unhandled |
 | Policy rules | 16 |
-| Migrations | 14 |
-| Source files | 115 |
+| Migrations | 15 |
+| Source files | 121 |
 
 Every figure on this page is measured or generated. Nothing is estimated.

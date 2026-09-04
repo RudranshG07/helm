@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ist, rupees } from './format.ts';
-import { actAsOperator } from './operator.ts';
+import { dashboardLink, sessionHeaders, setSession, storedSession } from './session.ts';
 import { Announce, SkeletonReport } from './skeletons.tsx';
 
 type Method = 'connect' | 'upload';
@@ -25,6 +25,40 @@ async function send<T>(path: string, body: unknown): Promise<T> {
   return parsed;
 }
 
+function PrivateLink() {
+  const [copied, setCopied] = useState(false);
+  const token = storedSession();
+  if (!token) return null;
+  const link = dashboardLink(token);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="private-link">
+      <strong>Your private dashboard link</strong>
+      <p>
+        This link is the only way into your dashboard. Save it before you close this page. Anyone
+        you send it to can read your mandates and your customers, so treat it like a password.
+        Connecting again with the same key issues a new link and retires this one.
+      </p>
+      <div className="private-link-row">
+        <code className="ref">{link}</code>
+        <button type="button" className="cta ghost" onClick={() => void copy()}>
+          {copied ? 'Copied' : 'Copy link'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Progress({ merchantId }: { merchantId: string }) {
   const [status, setStatus] = useState<Status | null>(null);
 
@@ -32,7 +66,9 @@ function Progress({ merchantId }: { merchantId: string }) {
     let stop = false;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/status`);
+        const res = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/status`, {
+          headers: sessionHeaders(),
+        });
         const body = (await res.json()) as Status;
         if (!stop) setStatus(body);
         if (!stop && body.onboarding_state === 'backfilling') setTimeout(() => void poll(), 1500);
@@ -45,7 +81,11 @@ function Progress({ merchantId }: { merchantId: string }) {
   }, [merchantId]);
 
   if (!status) {
-    return <div className="onboard-progress"><span className="spinner" aria-hidden="true" />Connecting…</div>;
+    return (
+      <div className="onboard-progress" role="status" aria-live="polite">
+        <span className="spinner" aria-hidden="true" />Connecting…
+      </div>
+    );
   }
 
   if (status.onboarding_state === 'failed') {
@@ -63,9 +103,14 @@ function Progress({ merchantId }: { merchantId: string }) {
   }
 
   return (
-    <div className="onboard-progress">
+    <div className="onboard-progress" role="status" aria-live="polite">
       <span className="spinner" aria-hidden="true" />
       Reading your payment history. This takes a moment.
+      {status.attempts > 0 && (
+        <span className="hint">
+          {status.subscriptions} mandates and {status.attempts} payments read so far.
+        </span>
+      )}
     </div>
   );
 }
@@ -99,12 +144,13 @@ export default function Onboard() {
     setError(null);
     try {
       const result = method === 'connect'
-        ? await send<{ merchant_id: string }>('/api/onboard/connect', {
+        ? await send<{ merchant_id: string; session: string }>('/api/onboard/connect', {
             name, key_id: keyId, key_secret: keySecret,
           })
-        : await send<{ merchant_id: string }>('/api/onboard/upload', {
+        : await send<{ merchant_id: string; session: string }>('/api/onboard/upload', {
             name, csv: file?.text ?? '',
           });
+      setSession(result.session);
       setMerchantId(result.merchant_id);
     } catch (err) {
       setError((err as Error).message);
@@ -262,7 +308,9 @@ function GrantAccess({ merchantId }: { merchantId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const r = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/consent`);
+    const r = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/consent`, {
+      headers: sessionHeaders(),
+    });
     if (r.ok) setState(await r.json() as Consent);
   }, [merchantId]);
 
@@ -272,8 +320,9 @@ function GrantAccess({ merchantId }: { merchantId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await actAsOperator(`/api/onboard/${encodeURIComponent(merchantId)}/consent`, {
+      const r = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/consent`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...sessionHeaders() },
         body: JSON.stringify({ granted, acknowledged: granted ? typed.trim() : undefined }),
       });
       const body = await r.json();
@@ -400,7 +449,7 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
 
   useEffect(() => {
     let stop = false;
-    fetch(`/api/onboard/${merchantId}/report`)
+    fetch(`/api/onboard/${merchantId}/report`, { headers: sessionHeaders() })
       .then(async (r) => {
         if (!r.ok) throw new Error('report unavailable');
         return r.json() as Promise<Report>;
@@ -419,6 +468,7 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
           charged and nothing will be until you grant write access.
         </p>
         <a className="cta" href="/dashboard">Open the dashboard</a>
+        <PrivateLink />
       </div>
     );
   }
@@ -441,6 +491,7 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
             recover yet. Helm will keep watching and tell you the moment one starts to slip.
           </p>
           <a className="cta" href="/dashboard">Open the dashboard</a>
+          <PrivateLink />
         </div>
 
         <GrantAccess merchantId={merchantId} />
@@ -531,6 +582,8 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
       )}
 
       <GrantAccess merchantId={merchantId} />
+
+      <PrivateLink />
 
       <div className="report-actions">
         <a className="cta" href="/dashboard">Open the dashboard</a>

@@ -15,7 +15,8 @@ import { registerWebhookRoutes } from './webhook.ts';
 
 const REDACTED_KEYS = [
   'key_secret', 'rzp_key_secret', 'webhook_secret', 'authorization',
-  'x-razorpay-signature', 'token', 'password', 'email', 'contact',
+  'x-razorpay-signature', 'x-helm-session', 'token', 'session',
+  'password', 'email', 'contact',
 ];
 
 const app = Fastify({

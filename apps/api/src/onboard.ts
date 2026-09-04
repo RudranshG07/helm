@@ -1,4 +1,4 @@
-import { requireOperator } from './guard.ts';
+import { issueSession, requireOwnMerchant } from './session.ts';
 import { buildRecoveryReport } from '@mandate/worker/report/recovery';
 import type { FastifyInstance } from 'fastify';
 import {
@@ -104,8 +104,9 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
         );
       });
 
+      const session = await issueSession(id);
       app.log.info({ event: 'onboard.connected', merchant_id: id, mode: shape.mode });
-      return { merchant_id: id, state: 'backfilling', mode: shape.mode, resumed };
+      return { merchant_id: id, state: 'backfilling', mode: shape.mode, resumed, session };
     },
   );
 
@@ -151,10 +152,12 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
         );
       });
 
+      const session = await issueSession(id);
       app.log.info({ event: 'onboard.uploaded', merchant_id: id, rows: preview.attempts.length });
       return {
         merchant_id: id,
         state: 'backfilling',
+        session,
         rows_readable: preview.attempts.length,
         rows_seen: preview.rows_seen,
         unrecognised_columns: preview.unrecognised_columns,
@@ -163,6 +166,7 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
   );
 
   app.get<{ Params: { id: string } }>('/api/onboard/:id/status', async (request, reply) => {
+    if (!(await requireOwnMerchant(request, reply, request.params.id))) return reply;
     const { rows } = await query<{
       onboarding_state: string; onboarding_error: string | null;
       subscriptions: number; attempts: number; failures: number;
@@ -193,6 +197,7 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
   app.get<{ Params: { id: string }; Querystring: { days?: string } }>(
     '/api/onboard/:id/report',
     async (request, reply) => {
+      if (!(await requireOwnMerchant(request, reply, request.params.id))) return reply;
       const { rows } = await query<{ id: string }>(
         `SELECT id FROM merchant WHERE id = $1`, [request.params.id],
       );
@@ -209,6 +214,7 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
   );
 
   app.get<{ Params: { id: string } }>('/api/onboard/:id/consent', async (request, reply) => {
+    if (!(await requireOwnMerchant(request, reply, request.params.id))) return reply;
     const { rows } = await query<{
       write_enabled: boolean; consent_signed_at: Date | null; mode: string;
       would_charge: number; would_charge_paise: string; refusals: number;
@@ -244,7 +250,7 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
   app.post<{ Params: { id: string }; Body: { granted?: boolean; acknowledged?: string } }>(
     '/api/onboard/:id/consent',
     async (request, reply) => {
-      if (!(await requireOperator(request, reply))) return reply;
+      if (!(await requireOwnMerchant(request, reply, request.params.id))) return reply;
       const granted = request.body?.granted === true;
 
       if (granted && request.body?.acknowledged !== ACKNOWLEDGEMENT) {

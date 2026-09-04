@@ -1,4 +1,4 @@
-import { actAsOperator } from './operator.ts';
+import { NotConnected, sessionHeaders } from './session.ts';
 export interface Overview {
   at_risk_count: number;
   critical_count: number;
@@ -67,7 +67,8 @@ export interface DenialRow {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path);
+  const res = await fetch(path, { headers: sessionHeaders() });
+  if (res.status === 401) throw new NotConnected();
   if (!res.ok) throw new Error(`${path} responded ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -156,14 +157,32 @@ export interface Detail {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await actAsOperator(path, { method: 'POST', body: JSON.stringify(body) });
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...sessionHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new NotConnected();
   const parsed = (await res.json()) as T & { error?: string };
   if (!res.ok) throw new Error(parsed.error ?? `${path} responded ${res.status}`);
   return parsed;
 }
 
+export interface PublicTotals {
+  merchants_connected: number;
+  mandates_watched: number;
+  decisions_made: number;
+  decisions_denied: number;
+  attempts_made: number;
+  recovered_paise: number;
+  recovered_count: number;
+  at_risk_paise: number;
+  first_connected_at: string | null;
+}
+
 export const api = {
   health: () => get<Health>('/health'),
+  publicTotals: () => get<PublicTotals>('/api/public'),
   merchants: () => get<{ merchants: Merchant[] }>('/api/merchants'),
   control: () => get<Control>('/api/control'),
   setKillSwitch: (engaged: boolean, token?: string, reason?: string) =>

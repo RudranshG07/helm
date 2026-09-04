@@ -1,4 +1,4 @@
-import { requireOperator } from './guard.ts';
+import { requireMerchant } from './session.ts';
 import { buildReport, reportIndex } from '@mandate/worker/reports/live';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
@@ -7,12 +7,15 @@ import { query } from '@mandate/db';
 
 
 export function registerControlRoutes(app: FastifyInstance): void {
-  app.get('/api/merchants', async () => {
+  app.get('/api/merchants', async (request, reply) => {
+    const merchant = await requireMerchant(request, reply);
+    if (merchant === null) return reply;
     const { rows } = await query(
       `SELECT m.id, m.name, m.mode, m.integration, m.write_enabled, m.cross_merchant_signals,
               m.consent_signed_at,
               (SELECT count(*)::int FROM subscription s WHERE s.merchant_id = m.id) AS subscriptions
-         FROM merchant m ORDER BY m.name`,
+         FROM merchant m WHERE m.id = $1`,
+      [merchant],
     );
     return { merchants: rows };
   });
@@ -32,7 +35,7 @@ export function registerControlRoutes(app: FastifyInstance): void {
   app.post<{ Body: { engaged?: boolean; reason?: string; token?: string } }>(
     '/api/control/kill-switch',
     async (request, reply) => {
-      if (!(await requireOperator(request, reply))) return reply;
+      if ((await requireMerchant(request, reply)) === null) return reply;
       const engaged = request.body?.engaged !== false;
 
       if (!engaged) {
