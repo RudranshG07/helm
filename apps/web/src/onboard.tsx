@@ -94,6 +94,18 @@ export default function Onboard() {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (merchantId !== null) return;
+    let stop = false;
+    fetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((me: { id: string; has_keys: boolean } | null) => {
+        if (!stop && me?.has_keys) setMerchantId(me.id);
+      })
+      .catch(() => undefined);
+    return () => { stop = true; };
+  }, [merchantId]);
+
   async function readFile(f: File) {
     if (f.size > 12_000_000) {
       setError('That file is larger than 12 MB. Split it and try again.');
