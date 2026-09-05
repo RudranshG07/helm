@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
 import type {
-  Control, Detail, DecisionTrace, Merchant, OutreachRow, QueueRow, RecoveryReport,
+  BatchRun, Control, Detail, DecisionTrace, Merchant, OutreachRow, QueueRow, RecoveryReport,
 } from './api.ts';
 import { signOut } from './session.ts';
 import { Markdown } from './markdown.tsx';
@@ -423,6 +423,135 @@ function MyRecovery() {
   );
 }
 
+const STEPS = [
+  'Seeding 120 failed mandates across three merchants',
+  'Classifying decline codes into buckets',
+  'Ranking candidate slots against the success model',
+  'Putting every proposal through the sixteen rules',
+  'Executing the allowed ones, exactly once',
+  'Reconciling and measuring both arms',
+];
+
+function LiveBatch() {
+  const [running, setRunning] = useState(false);
+  const [step, setStep] = useState(0);
+  const [result, setResult] = useState<BatchRun | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    setRunning(true);
+    setError(null);
+    setResult(null);
+    setStep(0);
+
+    const ticker = window.setInterval(
+      () => setStep((s) => Math.min(s + 1, STEPS.length - 1)),
+      1400,
+    );
+    try {
+      setResult(await api.runBatch(120));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      window.clearInterval(ticker);
+      setRunning(false);
+    }
+  }
+
+  const edge = result && result.control_recovered_paise > 0
+    ? ((result.amount_recovered_paise / Math.max(1, result.treatment_attempts))
+       / (result.control_recovered_paise / Math.max(1, result.control_attempts)) - 1) * 100
+    : null;
+
+  return (
+    <section className="live-batch">
+      <div className="section-head"><h2>Watch it work, before you turn it on</h2></div>
+      <p className="hint">
+        This runs the real decision engine, the real sixteen rules and the real exactly-once
+        executor over 120 failed mandates, against a simulated gateway. Two arms, identical attempt
+        budgets: one on the default retry schedule, one on Helm's. Nobody real is charged.
+      </p>
+
+      <button type="button" className="cta" onClick={() => void run()} disabled={running}>
+        {running ? 'Running…' : 'Run 120 mandates through the engine'}
+      </button>
+
+      {running && (
+        <p className="batch-step" role="status" aria-live="polite">
+          <span className="spinner" aria-hidden="true" />
+          {STEPS[step]}
+        </p>
+      )}
+
+      {error && <p className="form-error" role="alert">{error}</p>}
+
+      {result && (
+        <>
+          <div className="tiles spaced">
+            <div className="tile paper">
+              <span className="eyebrow">Recovered by Helm</span>
+              <strong className="num">{rupees(result.amount_recovered_paise)}</strong>
+              <span className="hint">
+                of {rupees(result.amount_at_risk_paise)} at risk, in {result.treatment_attempts} attempts
+              </span>
+            </div>
+            <div className="tile paper">
+              <span className="eyebrow">Recovered by the default schedule</span>
+              <strong className="num">{rupees(result.control_recovered_paise)}</strong>
+              <span className="hint">
+                {result.control_mandates_recovered} mandates, in {result.control_attempts} attempts
+              </span>
+            </div>
+            <div className="tile paper">
+              <span className="eyebrow">Per attempt</span>
+              <strong className="num">{edge === null ? '—' : `${edge > 0 ? '+' : ''}${edge.toFixed(0)}%`}</strong>
+              <span className="hint">same budget, different order of spending</span>
+            </div>
+            <div className="tile paper">
+              <span className="eyebrow">Exactly once</span>
+              <strong className="name">
+                <span className={`badge ${result.exactly_once_held ? 'healthy' : 'critical'}`}>
+                  {result.exactly_once_held ? 'held' : 'violated'}
+                </span>
+              </strong>
+              <span className="hint">{result.duplicates_blocked} duplicate charges blocked</span>
+            </div>
+          </div>
+
+          <p className="hint spaced-sm">
+            {result.decisions_recorded} decisions recorded, {result.escalations} mandates escalated
+            for a new mandate instead of a retry. Every rupee above is simulated; every decision is
+            the one Helm would make on a live account.
+          </p>
+
+          {Object.keys(result.policy_refusals).length > 0 && (
+            <div className="paper table-wrap spaced">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Refused by</th>
+                    <th scope="col" className="num">Times</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(result.policy_refusals)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([rule, n]) => (
+                      <tr key={rule}>
+                        <td><span className="ref">{rule}</span></td>
+                        <td className="num">{n}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 export function Reports({ slug }: { slug: string | null }) {
   const [list, setList] = useState<{ slug: string; title: string; description: string }[] | null>(null);
   const [markdown, setMarkdown] = useState<string | null>(null);
@@ -449,6 +578,8 @@ export function Reports({ slug }: { slug: string | null }) {
   return (
     <>
       <MyRecovery />
+
+      <LiveBatch />
 
       <div className="section-head spaced">
         <h2>How the engine was tested</h2>

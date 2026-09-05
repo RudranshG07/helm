@@ -90,6 +90,24 @@ export interface Merchant {
   subscriptions: number;
 }
 
+export interface BatchRun {
+  mandates: number;
+  attempts_spent: number;
+  mandates_recovered: number;
+  amount_recovered_paise: number;
+  amount_at_risk_paise: number;
+  decisions_recorded: number;
+  escalations: number;
+  duplicates_blocked: number;
+  exactly_once_held: boolean;
+  policy_refusals: Record<string, number>;
+  control_attempts: number;
+  control_recovered_paise: number;
+  control_mandates_recovered: number;
+  treatment_attempts: number;
+  simulated: boolean;
+}
+
 export interface RecoveryReport {
   merchant_id: string;
   window_days: number;
@@ -218,6 +236,7 @@ export const api = {
   chargeQueue: () => get<{ queue: QueueRow[]; note: string; charges_itself: boolean }>(
     '/api/charge-queue'),
   reports: () => get<{ reports: { slug: string; title: string; description: string }[] }>('/api/reports'),
+  runBatch: (count: number) => post<BatchRun>('/api/authorize/demo', { count }),
   recovery: (merchantId: string) =>
     get<RecoveryReport>(`/api/onboard/${encodeURIComponent(merchantId)}/report`),
   report: (slug: string) => get<{ slug: string; markdown: string }>(`/api/reports/${slug}`),

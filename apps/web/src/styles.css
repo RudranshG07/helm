@@ -1706,3 +1706,9 @@ tr.is-ours td { background: rgba(47, 125, 91, 0.09); }
 .tile.paper .hint { color: var(--ink-soft); }
 
 .verdict-card .ref, .read-only-notice code { color: var(--ink-faint); }
+
+.live-batch { margin: 26px 0; }
+.batch-step {
+  display: flex; align-items: center; gap: 10px;
+  margin: 14px 0 0; color: var(--paper-faint); font-size: 14px;
+}
