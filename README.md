@@ -136,7 +136,7 @@ The full catalogue — **279 scenarios, 272 handled, 6 detected, 1 unhandled** �
 ```bash
 pnpm install
 pnpm dev          # database, migrations, web build, worker, api on :3000
-pnpm test         # 996 tests, against isolated databases
+pnpm test         # 1001 tests, against isolated databases
 ```
 
 Deployed as a single service: the worker runs inside the web process, so it fits a free tier. Postgres is in Mumbai for data residency.
@@ -152,10 +152,10 @@ connect   /onboard     dash    /dashboard mandates  /authorize
 
 | | |
 |---|---|
-| Tests | 996 |
+| Tests | 1001 |
 | Adversarial scenarios | 279 — 272 handled, 6 detected, 1 unhandled |
 | Policy rules | 16 |
-| Migrations | 19 |
+| Migrations | 20 |
 | Source files | 125 |
 
 Every figure on this page is measured or generated. Nothing is estimated.

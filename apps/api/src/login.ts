@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { decryptSecret, deriveMasterKey, fingerprint, inspectKeyId } from '@mandate/core';
 import { query } from '@mandate/db';
 import { checkPassword, hashPassword, normaliseEmail, verifyPassword } from './auth.ts';
-import { clearSessionCookie, requireMerchant, signIn } from './session.ts';
+import { clearSessionCookie, endSession, requireMerchant, sessionToken, signIn } from './session.ts';
 
 const MAX_ATTEMPTS = 6;
 const WINDOW_MS = 15 * 60 * 1000;
@@ -108,16 +108,19 @@ export function registerLoginRoutes(app: FastifyInstance): void {
     return { merchant_id: merchant.id, name: merchant.name };
   });
 
-  app.post('/api/auth/logout', async (request, reply) => {
+  app.post<{ Body: { everywhere?: boolean } }>('/api/auth/logout', async (request, reply) => {
     const merchant = await requireMerchant(request, reply);
     if (merchant === null) return reply;
 
-    await query(
-      `UPDATE merchant SET session_token_hash = NULL, session_issued_at = NULL WHERE id = $1`,
-      [merchant],
-    );
+    if (request.body?.everywhere === true) {
+      await query(`DELETE FROM merchant_session WHERE merchant_id = $1`, [merchant]);
+    } else {
+      const token = sessionToken(request);
+      if (token !== null) await endSession(token);
+    }
+
     clearSessionCookie(request, reply);
-    return { signed_out: true };
+    return { signed_out: true, everywhere: request.body?.everywhere === true };
   });
 
   app.get('/api/auth/me', async (request, reply) => {

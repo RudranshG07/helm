@@ -17,12 +17,19 @@ export function hashSessionToken(token: string): string {
 export async function issueSession(merchantId: string): Promise<string> {
   const token = mintSessionToken();
   await query(
-    `UPDATE merchant
-        SET session_token_hash = $2, session_issued_at = now()
-      WHERE id = $1`,
-    [merchantId, hashSessionToken(token)],
+    `INSERT INTO merchant_session (token_hash, merchant_id) VALUES ($1, $2)
+     ON CONFLICT (token_hash) DO NOTHING`,
+    [hashSessionToken(token), merchantId],
   );
   return token;
+}
+
+export async function endSession(token: string): Promise<void> {
+  await query(`DELETE FROM merchant_session WHERE token_hash = $1`, [hashSessionToken(token)]);
+}
+
+export function sessionToken(request: FastifyRequest): string | null {
+  return suppliedToken(request);
 }
 
 function overHttps(request: FastifyRequest): boolean {
@@ -89,11 +96,13 @@ export async function resolveMerchant(request: FastifyRequest): Promise<string |
   const token = suppliedToken(request);
   if (token === null) return null;
 
-  const { rows } = await query<{ id: string }>(
-    `SELECT id FROM merchant WHERE session_token_hash = $1`,
+  const { rows } = await query<{ merchant_id: string }>(
+    `UPDATE merchant_session SET last_seen_at = clock_timestamp()
+      WHERE token_hash = $1
+      RETURNING merchant_id`,
     [hashSessionToken(token)],
   );
-  return rows[0]?.id ?? null;
+  return rows[0]?.merchant_id ?? null;
 }
 
 export async function requireMerchant(
