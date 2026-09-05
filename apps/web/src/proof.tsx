@@ -41,6 +41,25 @@ interface CrossMerchant {
   uncontested_label: string;
 }
 
+interface CalibrationBand {
+  band: string;
+  predicted_mean: number;
+  observed_rate: number;
+  n: number;
+}
+
+interface CalibrationData {
+  scored: number;
+  brier: number | null;
+  baseline_brier: number | null;
+  skill: number | null;
+  observed_rate: number | null;
+  predicted_mean: number | null;
+  bands: CalibrationBand[];
+  real_account_scored: number;
+  verdict: string;
+}
+
 interface ProofData {
   generated_at: string;
   scale: Record<string, number>;
@@ -57,6 +76,7 @@ interface ProofData {
     promises_broken: number;
   };
   cross_merchant: CrossMerchant;
+  calibration: CalibrationData;
   honesty: {
     taxonomy_version: string;
     unmapped_attempts: number;
@@ -205,6 +225,7 @@ export default function Proof() {
   const o = data.outreach;
   const x = data.cross_merchant;
   const real = data.real;
+  const cal = data.calibration;
 
   return (
     <div className="shell proof" ref={shell}>
@@ -457,6 +478,68 @@ export default function Proof() {
 
       <Section
         n={real.connected ? 7 : 6}
+        eyebrow="Was the model right?"
+        title="Every prediction, scored against what happened."
+        lede="The model states a probability before it acts, and that number is stored rather than recomputed later. Each one is then scored against the attempt it actually caused. A model nobody checks can claim anything."
+      >
+        <div className="tiles">
+          <div className="tile paper">
+            <span className="eyebrow">Predictions scored</span>
+            <strong className="num">{cal.scored}</strong>
+            <span className="hint">
+              {cal.real_account_scored} on a real account
+            </span>
+          </div>
+          <div className="tile paper">
+            <span className="eyebrow">It said</span>
+            <strong className="num">
+              {cal.predicted_mean === null ? '—' : `${(cal.predicted_mean * 100).toFixed(1)}%`}
+            </strong>
+            <span className="hint">
+              it happened {cal.observed_rate === null ? '—' : `${(cal.observed_rate * 100).toFixed(1)}%`} of the time
+            </span>
+          </div>
+          <div className="tile paper">
+            <span className="eyebrow">Skill over the base rate</span>
+            <strong className="num">
+              {cal.skill === null ? '—' : cal.skill.toFixed(2)}
+            </strong>
+            <span className="hint">
+              Brier {cal.brier === null ? '—' : cal.brier.toFixed(3)} against {cal.baseline_brier === null ? '—' : cal.baseline_brier.toFixed(3)}
+            </span>
+          </div>
+        </div>
+
+        {cal.bands.length > 0 && (
+          <div className="paper table-wrap spaced">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">When it said</th>
+                  <th scope="col" className="num">It meant</th>
+                  <th scope="col" className="num">It happened</th>
+                  <th scope="col" className="num">Attempts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cal.bands.map((b) => (
+                  <tr key={b.band}>
+                    <td>{b.band}</td>
+                    <td className="num">{(b.predicted_mean * 100).toFixed(1)}%</td>
+                    <td className="num">{(b.observed_rate * 100).toFixed(1)}%</td>
+                    <td className="num">{b.n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className="proof-callout">{cal.verdict}</p>
+      </Section>
+
+      <Section
+        n={real.connected ? 8 : 7}
         eyebrow="What we do not know"
         title="The honesty metrics"
         lede="Anything that would flatter the numbers is reported here instead."

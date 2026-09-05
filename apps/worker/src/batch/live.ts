@@ -190,13 +190,15 @@ async function recordDecision(
   proposal: Proposal,
   verdict: { verdict: string; rule_id: string; scheduled_for?: Date | string | null; explanation?: string },
   context: Record<string, unknown>,
+  prediction?: { p_success: number | null; evidence: number; level: string | null } | null,
 ): Promise<number | null> {
   const { rows } = await query<{ id: string }>(
     `INSERT INTO decision (
        subscription_id, cycle, proposed_action, proposed_by, confidence,
        verdict, rule_id, scheduled_for, proposed_for, rationale, explanation,
-       agent_context, taxonomy_version
-     ) VALUES ($1,$2,$3,'allocator',$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       agent_context, taxonomy_version,
+       predicted_p, predicted_evidence, predicted_level
+     ) VALUES ($1,$2,$3,'allocator',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      RETURNING id::text AS id`,
     [
       subscriptionId, cycle, proposal.action, proposal.confidence ?? null,
@@ -204,6 +206,7 @@ async function recordDecision(
       verdict.scheduled_for ?? null, proposal.scheduled_for ?? null,
       proposal.reason ?? null, verdict.explanation ?? null,
       context, TAXONOMY_VERSION,
+      prediction?.p_success ?? null, prediction?.evidence ?? null, prediction?.level ?? null,
     ],
   );
   const id = rows[0]?.id;
@@ -410,7 +413,7 @@ export async function runLiveBatch(options: LiveBatchOptions = {}): Promise<Live
         now: cursor.toISOString(),
         arm: 'treatment',
         source: 'batch',
-      });
+      }, plan.schedule[0] ?? null);
       result.decisions_recorded += 1;
 
       const outcome = await execute(

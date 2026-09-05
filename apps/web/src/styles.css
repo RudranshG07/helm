@@ -1654,3 +1654,10 @@ tr.is-ours td { background: rgba(47, 125, 91, 0.09); }
 .pull-up-more { margin-top: -8px; }
 .is-faint { opacity: 0.6; }
 .block-lede { margin: 0 0 14px; color: var(--ink-soft); line-height: 1.55; }
+
+.sign-in { max-width: 46ch; margin: 0 auto; }
+.sign-in h1 {
+  margin: 0 0 4px;
+  font-family: var(--display); font-weight: var(--display-weight);
+  font-size: var(--step-md); line-height: var(--display-leading);
+}

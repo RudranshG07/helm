@@ -1,4 +1,5 @@
-import { issueSession, requireOwnMerchant } from './session.ts';
+import { requireOwnMerchant, signIn } from './session.ts';
+import { checkEmail, checkPassword, hashPassword, normaliseEmail } from './auth.ts';
 import { buildRecoveryReport } from '@mandate/worker/report/recovery';
 import type { FastifyInstance } from 'fastify';
 import {
@@ -43,14 +44,23 @@ async function verifyKeys(keyId: string, keySecret: string): Promise<{ ok: true 
 const ACKNOWLEDGEMENT = 'I authorise Helm to charge my customers';
 
 export function registerOnboardRoutes(app: FastifyInstance): void {
-  app.post<{ Body: { name?: string; key_id?: string; key_secret?: string } }>(
+  app.post<{
+    Body: { name?: string; key_id?: string; key_secret?: string; email?: string; password?: string };
+  }>(
     '/api/onboard/connect',
     async (request, reply) => {
       const name = (request.body?.name ?? '').trim();
       const keyId = (request.body?.key_id ?? '').trim();
       const keySecret = (request.body?.key_secret ?? '').trim();
+      const email = normaliseEmail(request.body?.email ?? '');
+      const password = request.body?.password ?? '';
 
       if (name.length === 0) return reply.code(400).send({ error: 'Give the business a name.' });
+
+      const emailShape = checkEmail(email);
+      if (!emailShape.ok) return reply.code(400).send({ error: emailShape.problem });
+      const passwordShape = checkPassword(password);
+      if (!passwordShape.ok) return reply.code(400).send({ error: passwordShape.problem });
 
       const shape = inspectKeyId(keyId);
       if (!shape.valid) return reply.code(400).send({ error: shape.problem });
@@ -81,12 +91,25 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
       const resumed = existing.length > 0;
       const id = existing[0]?.id ?? slug(name);
 
+      const { rows: clash } = await query<{ id: string }>(
+        `SELECT id FROM merchant WHERE lower(email) = $1 AND id <> $2`, [email, id],
+      );
+      if (clash.length > 0) {
+        return reply.code(409).send({
+          error: 'Another business already signs in with that email. Use a different one.',
+        });
+      }
+
+      const passwordHash = await hashPassword(password);
+
       await withTransaction(async (client) => {
         await client.query(
           `INSERT INTO merchant (
              id, name, mode, rzp_key_id, rzp_key_secret_enc, key_fingerprint,
-             integration, onboarding_state, connected_at, write_enabled
-           ) VALUES ($1,$2,$3,$4,$5,$6,'recurring_tokens','backfilling',clock_timestamp(),FALSE)
+             integration, onboarding_state, connected_at, write_enabled,
+             email, password_hash, password_set_at
+           ) VALUES ($1,$2,$3,$4,$5,$6,'recurring_tokens','backfilling',clock_timestamp(),FALSE,
+                     $7,$8,now())
            ON CONFLICT (id) DO UPDATE SET
              name = EXCLUDED.name,
              rzp_key_id = EXCLUDED.rzp_key_id,
@@ -94,8 +117,12 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
              key_fingerprint = EXCLUDED.key_fingerprint,
              onboarding_state = 'backfilling',
              onboarding_error = NULL,
-             connected_at = clock_timestamp()`,
-          [id, name, shape.mode, keyId, encryptSecret(keySecret, key), fingerprint(keyId)],
+             connected_at = clock_timestamp(),
+             email = EXCLUDED.email,
+             password_hash = EXCLUDED.password_hash,
+             password_set_at = now()`,
+          [id, name, shape.mode, keyId, encryptSecret(keySecret, key), fingerprint(keyId),
+           email, passwordHash],
         );
 
         await client.query(
@@ -104,20 +131,27 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
         );
       });
 
-      const session = await issueSession(id);
+      await signIn(request, reply, id);
       app.log.info({ event: 'onboard.connected', merchant_id: id, mode: shape.mode });
-      return { merchant_id: id, state: 'backfilling', mode: shape.mode, resumed, session };
+      return { merchant_id: id, state: 'backfilling', mode: shape.mode, resumed };
     },
   );
 
-  app.post<{ Body: { name?: string; csv?: string } }>(
+  app.post<{ Body: { name?: string; csv?: string; email?: string; password?: string } }>(
     '/api/onboard/upload',
     async (request, reply) => {
       const name = (request.body?.name ?? '').trim();
       const csv = request.body?.csv ?? '';
+      const email = normaliseEmail(request.body?.email ?? '');
+      const password = request.body?.password ?? '';
 
       if (name.length === 0) return reply.code(400).send({ error: 'Give the business a name.' });
       if (csv.length === 0) return reply.code(400).send({ error: 'The file is empty.' });
+
+      const emailShape = checkEmail(email);
+      if (!emailShape.ok) return reply.code(400).send({ error: emailShape.problem });
+      const passwordShape = checkPassword(password);
+      if (!passwordShape.ok) return reply.code(400).send({ error: passwordShape.problem });
       if (csv.length > 12_000_000) {
         return reply.code(413).send({ error: 'That file is larger than 12 MB. Split it and try again.' });
       }
@@ -137,13 +171,27 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
 
       const id = slug(name);
 
+      const { rows: clash } = await query<{ id: string }>(
+        `SELECT id FROM merchant WHERE lower(email) = $1 AND id <> $2`, [email, id],
+      );
+      if (clash.length > 0) {
+        return reply.code(409).send({
+          error: 'Another business already signs in with that email. Use a different one.',
+        });
+      }
+
+      const passwordHash = await hashPassword(password);
+
       await withTransaction(async (client) => {
         await client.query(
-          `INSERT INTO merchant (id, name, mode, onboarding_state, connected_at, write_enabled)
-           VALUES ($1,$2,'test','backfilling',clock_timestamp(),FALSE)
+          `INSERT INTO merchant (id, name, mode, onboarding_state, connected_at, write_enabled,
+                                 email, password_hash, password_set_at)
+           VALUES ($1,$2,'test','backfilling',clock_timestamp(),FALSE,$3,$4,now())
            ON CONFLICT (id) DO UPDATE SET
-             name = EXCLUDED.name, onboarding_state = 'backfilling', onboarding_error = NULL`,
-          [id, name],
+             name = EXCLUDED.name, onboarding_state = 'backfilling', onboarding_error = NULL,
+             email = EXCLUDED.email, password_hash = EXCLUDED.password_hash,
+             password_set_at = now()`,
+          [id, name, passwordHash],
         );
         await client.query(
           `INSERT INTO onboarding_job (merchant_id, kind, progress)
@@ -152,12 +200,11 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
         );
       });
 
-      const session = await issueSession(id);
+      await signIn(request, reply, id);
       app.log.info({ event: 'onboard.uploaded', merchant_id: id, rows: preview.attempts.length });
       return {
         merchant_id: id,
         state: 'backfilling',
-        session,
         rows_readable: preview.attempts.length,
         rows_seen: preview.rows_seen,
         unrecognised_columns: preview.unrecognised_columns,

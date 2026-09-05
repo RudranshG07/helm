@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.ts';
 import type { Control, Detail, DecisionTrace, Merchant, OutreachRow, QueueRow } from './api.ts';
-import { forgetSession } from './session.ts';
+import { signOut } from './session.ts';
 import { Markdown } from './markdown.tsx';
 import { Announce, SkeletonTable } from './skeletons.tsx';
 import { bucketLabel, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
@@ -358,7 +358,7 @@ function SignOut() {
       <button
         type="button"
         className="cta ghost"
-        onClick={() => { forgetSession(); window.location.reload(); }}
+        onClick={() => { void signOut().then(() => window.location.reload()); }}
       >
         Sign out
       </button>

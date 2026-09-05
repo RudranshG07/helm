@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { rupees } from './format.ts';
-import { sessionHeaders } from './session.ts';
 import { Announce, SkeletonReport } from './skeletons.tsx';
 
 type RailStatus = 'usable' | 'disabled' | 'not_provisioned' | 'failing';
@@ -87,8 +86,8 @@ export default function Authorize() {
 
   const refresh = useCallback(async () => {
     const [cRes, mRes] = await Promise.all([
-      fetch('/api/authorize/config', { headers: sessionHeaders() }),
-      fetch('/api/authorize/mandates', { headers: sessionHeaders() }),
+      fetch('/api/authorize/config'),
+      fetch('/api/authorize/mandates'),
     ]);
     if (cRes.status === 401 || mRes.status === 401) {
       setLocked(true);
@@ -109,7 +108,7 @@ export default function Authorize() {
     try {
       const prep = await fetch('/api/authorize/prepare', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...sessionHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label, amount_paise: amountPaise, method: payMethod }),
       }).then(async (r) => {
         const b = await r.json();
@@ -135,7 +134,7 @@ export default function Authorize() {
           try {
             const saved = await fetch('/api/authorize/complete', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...sessionHeaders() },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ payment_id: response.razorpay_payment_id, label, amount_paise: amountPaise }),
             }).then(async (r) => {
               const b = await r.json();

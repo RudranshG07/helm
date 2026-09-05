@@ -334,14 +334,17 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
       });
     }
 
+    const chosen = explored.plan.schedule[0] ?? null;
+
     await withTransaction(async (client) => {
       await client.query(
         `INSERT INTO decision (
            subscription_id, cycle, proposed_action, proposed_by, prompt_version, confidence,
            verdict, rule_id, scheduled_for, proposed_for, rationale, explanation,
            agent_context, taxonomy_version,
-           logging_propensity, target_propensity, explored, expected_paise, slots_considered
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+           logging_propensity, target_propensity, explored, expected_paise, slots_considered,
+           predicted_p, predicted_evidence, predicted_level
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
         [
           row.subscription_id, row.cycle, proposal.action, 'allocator', outcome.prompt_version,
           proposal.confidence, verdict.verdict, verdict.rule_id,
@@ -349,6 +352,7 @@ export async function decideBatch(agent: ProposalClient, now = new Date()): Prom
           proposal.reason, verdict.explanation, ctx, row.taxonomy_version,
           explored.logging_propensity, explored.target_propensity, explored.explored,
           explored.plan.expected_paise, explored.slots_considered,
+          chosen?.p_success ?? null, chosen?.evidence ?? null, chosen?.level ?? null,
         ],
       );
     });

@@ -65,6 +65,9 @@ export interface RealAccount {
   attempts_via_backfill: number;
 }
 
+import { buildCalibration } from '../calibration.ts';
+import type { Calibration } from '../calibration.ts';
+
 export interface Proof {
   generated_at: string;
   scale: ProofScale;
@@ -76,6 +79,7 @@ export interface Proof {
   outreach: ProofOutreach;
   cross_merchant: CrossMerchant;
   honesty: ProofHonesty;
+  calibration: Calibration;
 }
 
 async function one<T extends Record<string, unknown>>(sql: string): Promise<T | undefined> {
@@ -223,6 +227,7 @@ export async function buildProof(): Promise<Proof> {
      GROUP BY 1,2,3 ORDER BY n DESC LIMIT 8`);
 
   const contention = await analyzeContention();
+  const calibration = await buildCalibration();
 
   const gaps = SCENARIOS.filter((s) => s.outcome === 'UNHANDLED');
   const total = Number(unmapped?.total ?? 0);
@@ -238,6 +243,7 @@ export async function buildProof(): Promise<Proof> {
       outreach: Number(scale?.['outreach'] ?? 0),
       promises: Number(scale?.['promises'] ?? 0),
     },
+    calibration,
     real: {
       connected: Number(realTotals?.['merchants'] ?? 0) > 0,
       merchants: Number(realTotals?.['merchants'] ?? 0),

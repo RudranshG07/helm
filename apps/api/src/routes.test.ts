@@ -5,6 +5,7 @@ import { registerAuthorizeRoutes } from './authorize.ts';
 import { registerChargeQueueRoutes } from './charge-queue.ts';
 import { registerControlRoutes } from './control.ts';
 import { registerDashboardRoutes } from './dashboard.ts';
+import { registerLoginRoutes } from './login.ts';
 import { registerOnboardRoutes } from './onboard.ts';
 import { registerReauthRoutes } from './reauth.ts';
 import { registerWebhookRoutes } from './webhook.ts';
@@ -17,6 +18,7 @@ const PUBLIC = new Set([
   'GET /api/control',
   'GET /api/reports',
   'GET /api/reports/:name',
+  'POST /api/auth/login',
   'POST /api/onboard/connect',
   'POST /api/onboard/upload',
   'POST /webhooks/razorpay',
@@ -40,6 +42,7 @@ beforeAll(async () => {
   app.get('/health', async () => ({ ok: true }));
   registerDashboardRoutes(app);
   registerControlRoutes(app);
+  registerLoginRoutes(app);
   registerOnboardRoutes(app);
   registerChargeQueueRoutes(app);
   registerAuthorizeRoutes(app);

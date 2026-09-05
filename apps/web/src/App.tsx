@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
-import { NotConnected, captureSessionFromUrl, forgetSession } from './session.ts';
+import { NotConnected, signIn } from './session.ts';
 import type { AtRiskRow, Control, DeclineRow, DecisionRow, DenialRow, Overview, UnmappedRow } from './api.ts';
 import { Account, ChargeQueue, KillSwitch, MandateDetail, Outreach, Reports, Trace } from './views.tsx';
 import { Announce, SkeletonReport } from './skeletons.tsx';
@@ -321,7 +321,25 @@ function Loading() {
   );
 }
 
-function NotConnectedScreen() {
+function SignInScreen({ onSignedIn }: { onSignedIn: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setProblem(null);
+    try {
+      await signIn(email, password);
+      onSignedIn();
+    } catch (err) {
+      setProblem((err as Error).message);
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="shell">
       <header className="masthead">
@@ -330,29 +348,47 @@ function NotConnectedScreen() {
           <nav className="site-links" aria-label="Product">
             <a className="site-link" href="/proof">Proof</a>
             <a className="site-link" href="/docs">Docs</a>
-            <a className="site-link" href="/onboard">Connect</a>
             <a className="site-link" href="/">Home</a>
           </nav>
         </div>
       </header>
-      <div className="state locked">
-        <strong>This dashboard is private</strong>
-        <p>
-          It shows one business at a time: your mandates, your customers, your decisions. Nobody
-          reaches it without the link issued to your account.
+
+      <form className="onboard-form paper sign-in" onSubmit={(e) => void submit(e)}>
+        <h1>Sign in</h1>
+        <p className="field-note">
+          Your dashboard shows your mandates and your customers, and nobody else can open it.
         </p>
-        <a className="cta" href="/onboard">Connect your Razorpay account</a>
-        <p className="hint">
-          Already connected? Open the dashboard link you saved. Connecting again with the same
-          key issues a fresh link and retires the old one.
+
+        <label htmlFor="email">Email</label>
+        <input
+          id="email" name="email" type="email" autoComplete="email" required
+          value={email} onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@yourbusiness.in"
+        />
+
+        <label htmlFor="pw">Password</label>
+        <input
+          id="pw" name="password" type="password" autoComplete="current-password" required
+          value={password} onChange={(e) => setPassword(e.target.value)}
+        />
+
+        {problem && <p className="form-error" role="alert">{problem}</p>}
+
+        <button type="submit" className="cta" disabled={busy}>
+          {busy ? 'Signing in…' : 'Sign in'}
+        </button>
+
+        <p className="field-note">
+          No account yet? <a className="link" href="/onboard">Connect your Razorpay account</a>.
+          Forgotten your password? Connecting the same key again sets a new one.
         </p>
-      </div>
+      </form>
     </div>
   );
 }
 
 export default function App() {
-  const [session, setSession] = useState<string | null>(() => captureSessionFromUrl());
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<string | null>(null);
@@ -377,11 +413,11 @@ export default function App() {
         denials: decisions.denials_by_rule,
       });
       setMode(health.mode);
+      setSignedIn(true);
       setError(null);
     } catch (err) {
       if (err instanceof NotConnected) {
-        forgetSession();
-        setSession(null);
+        setSignedIn(false);
         return;
       }
       setError(err instanceof Error ? err.message : String(err));
@@ -389,13 +425,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (session === null) return;
+    if (signedIn === false) return;
     void load();
     const timer = setInterval(() => void load(), 15_000);
     return () => clearInterval(timer);
-  }, [load, session]);
+  }, [load, signedIn]);
 
-  if (session === null) return <NotConnectedScreen />;
+  if (signedIn === false) {
+    return <SignInScreen onSignedIn={() => { setSignedIn(null); void load(); }} />;
+  }
 
   if (error) {
     return (

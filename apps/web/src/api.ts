@@ -1,4 +1,4 @@
-import { NotConnected, sessionHeaders } from './session.ts';
+import { NotConnected } from './session.ts';
 export interface Overview {
   at_risk_count: number;
   critical_count: number;
@@ -67,7 +67,7 @@ export interface DenialRow {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: sessionHeaders() });
+  const res = await fetch(path);
   if (res.status === 401) throw new NotConnected();
   if (!res.ok) throw new Error(`${path} responded ${res.status}`);
   return res.json() as Promise<T>;
@@ -159,7 +159,7 @@ export interface Detail {
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...sessionHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (res.status === 401) throw new NotConnected();

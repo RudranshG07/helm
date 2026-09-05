@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ist, rupees } from './format.ts';
-import { dashboardLink, sessionHeaders, setSession, storedSession } from './session.ts';
 import { Announce, SkeletonReport } from './skeletons.tsx';
 
 type Method = 'connect' | 'upload';
@@ -25,45 +24,6 @@ async function send<T>(path: string, body: unknown): Promise<T> {
   return parsed;
 }
 
-function PrivateLink() {
-  const [copy, setCopy] = useState<'idle' | 'done' | 'failed'>('idle');
-  const token = storedSession();
-  if (!token) return null;
-  const link = dashboardLink(token);
-
-  async function toClipboard() {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopy('done');
-      window.setTimeout(() => setCopy('idle'), 2000);
-    } catch {
-      setCopy('failed');
-    }
-  }
-
-  return (
-    <div className="private-link">
-      <strong>Your private dashboard link</strong>
-      <p>
-        This link is the only way into your dashboard. Save it before you close this page. Anyone
-        you send it to can read your mandates and your customers, so treat it like a password.
-        Connecting again with the same key issues a new link and retires this one.
-      </p>
-      <div className="private-link-row">
-        <code className="ref">{link}</code>
-        <button type="button" className="cta ghost" onClick={() => void toClipboard()}>
-          {copy === 'done' ? 'Copied' : 'Copy link'}
-        </button>
-      </div>
-      {copy === 'failed' && (
-        <span className="hint" role="alert">
-          This browser would not let the page copy for you. Select the link above and copy it.
-        </span>
-      )}
-    </div>
-  );
-}
-
 function Progress({ merchantId }: { merchantId: string }) {
   const [status, setStatus] = useState<Status | null>(null);
 
@@ -71,9 +31,7 @@ function Progress({ merchantId }: { merchantId: string }) {
     let stop = false;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/status`, {
-          headers: sessionHeaders(),
-        });
+        const res = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/status`);
         const body = (await res.json()) as Status;
         if (!stop) setStatus(body);
         if (!stop && body.onboarding_state === 'backfilling') setTimeout(() => void poll(), 1500);
@@ -125,6 +83,8 @@ export default function Onboard() {
   const [name, setName] = useState('');
   const [keyId, setKeyId] = useState('');
   const [keySecret, setKeySecret] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,13 +109,12 @@ export default function Onboard() {
     setError(null);
     try {
       const result = method === 'connect'
-        ? await send<{ merchant_id: string; session: string }>('/api/onboard/connect', {
-            name, key_id: keyId, key_secret: keySecret,
+        ? await send<{ merchant_id: string }>('/api/onboard/connect', {
+            name, key_id: keyId, key_secret: keySecret, email, password,
           })
-        : await send<{ merchant_id: string; session: string }>('/api/onboard/upload', {
-            name, csv: file?.text ?? '',
+        : await send<{ merchant_id: string }>('/api/onboard/upload', {
+            name, csv: file?.text ?? '', email, password,
           });
-      setSession(result.session);
       setMerchantId(result.merchant_id);
     } catch (err) {
       setError((err as Error).message);
@@ -218,6 +177,10 @@ export default function Onboard() {
       </div>
 
       <form className="onboard-form paper" onSubmit={(e) => void submit(e)}>
+        <p className="field-note">
+          Already have an account? <a className="link" href="/dashboard">Sign in</a>.
+        </p>
+
         <label htmlFor="biz">Business name</label>
         <input
           id="biz" name="organization" autoComplete="organization" required
@@ -279,6 +242,24 @@ export default function Onboard() {
           </>
         )}
 
+        <label htmlFor="email">Email to sign in with</label>
+        <input
+          id="email" name="email" type="email" autoComplete="email" required
+          value={email} onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@yourbusiness.in"
+        />
+
+        <label htmlFor="pw">Password</label>
+        <input
+          id="pw" name="password" type="password" autoComplete="new-password" required
+          minLength={10} value={password} onChange={(e) => setPassword(e.target.value)}
+          placeholder="At least 10 characters"
+        />
+        <p className="field-note">
+          This is how you get back in. Forgotten it? Connect the same Razorpay key again and it
+          sets a new one.
+        </p>
+
         {error && <p className="form-error" role="alert">{error}</p>}
 
         <button type="submit" className="cta" disabled={busy || (method === 'upload' && !file)}>
@@ -313,9 +294,7 @@ function GrantAccess({ merchantId }: { merchantId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const r = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/consent`, {
-      headers: sessionHeaders(),
-    });
+    const r = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/consent`);
     if (r.ok) setState(await r.json() as Consent);
   }, [merchantId]);
 
@@ -327,7 +306,7 @@ function GrantAccess({ merchantId }: { merchantId: string }) {
     try {
       const r = await fetch(`/api/onboard/${encodeURIComponent(merchantId)}/consent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...sessionHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ granted, acknowledged: granted ? typed.trim() : undefined }),
       });
       const body = await r.json();
@@ -454,7 +433,7 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
 
   useEffect(() => {
     let stop = false;
-    fetch(`/api/onboard/${merchantId}/report`, { headers: sessionHeaders() })
+    fetch(`/api/onboard/${merchantId}/report`)
       .then(async (r) => {
         if (!r.ok) throw new Error('report unavailable');
         return r.json() as Promise<Report>;
@@ -473,7 +452,6 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
           charged and nothing will be until you grant write access.
         </p>
         <a className="cta" href="/dashboard">Open the dashboard</a>
-        <PrivateLink />
       </div>
     );
   }
@@ -496,7 +474,6 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
             recover yet. Helm will keep watching and tell you the moment one starts to slip.
           </p>
           <a className="cta" href="/dashboard">Open the dashboard</a>
-          <PrivateLink />
         </div>
 
         <GrantAccess merchantId={merchantId} />
@@ -587,8 +564,6 @@ function RecoveryReport({ merchantId, status }: { merchantId: string; status: St
       )}
 
       <GrantAccess merchantId={merchantId} />
-
-      <PrivateLink />
 
       <div className="report-actions">
         <a className="cta" href="/dashboard">Open the dashboard</a>
