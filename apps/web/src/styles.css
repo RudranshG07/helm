@@ -667,8 +667,10 @@ h3.sub .count { margin-left: 8px; color: var(--paper-hint); font-family: var(--s
 }
 .cta:hover { background: var(--paper-lift); transform: translateY(-1px); box-shadow: var(--shadow-deep); }
 .cta:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
-.cta.ghost, .paper .cta.ghost { min-height: 38px; padding: 0 16px; background: transparent; color: var(--ink); border: 1px solid var(--line-strong); box-shadow: none; font-size: 13px; }
-.cta.ghost:hover { background: rgba(17, 20, 17, 0.05); }
+.cta.ghost { min-height: 38px; padding: 0 16px; background: transparent; color: var(--paper); border: 1px solid var(--line-paper-strong); box-shadow: none; font-size: 13px; }
+.cta.ghost:hover { background: var(--surface-paper-08); }
+.paper .cta.ghost { color: var(--ink); border-color: var(--line-strong); }
+.paper .cta.ghost:hover { background: rgba(17, 20, 17, 0.05); }
 
 .dropzone {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -1674,7 +1676,7 @@ tr.is-ours td { background: rgba(47, 125, 91, 0.09); }
 .verdict-card {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
   margin-top: 14px; padding: 14px 16px;
-  background: var(--paper); border-radius: var(--radius-sm);
+  background: var(--paper); color: var(--ink); border-radius: var(--radius-sm);
   border-left: 4px solid var(--line-strong);
 }
 .verdict-card.is-allow { border-left-color: var(--good); }
@@ -1689,8 +1691,18 @@ tr.is-ours td { background: rgba(47, 125, 91, 0.09); }
 .read-only-notice {
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
   margin: 12px 0; padding: 16px 18px;
-  background: var(--paper); border-left: 4px solid var(--warn);
-  border-radius: var(--radius-sm);
+  background: var(--paper); color: var(--ink);
+  border-left: 4px solid var(--warn); border-radius: var(--radius-sm);
 }
+.read-only-notice p { color: var(--ink-soft); }
 .read-only-notice strong { font-size: 15px; }
 .read-only-notice p { margin: 0; max-width: 62ch; font-size: 14px; line-height: 1.5; }
+
+/* .hint is light for the dark shell; inside any light panel it must invert */
+.paper .hint,
+.state .hint,
+.verdict-card .hint,
+.read-only-notice .hint,
+.tile.paper .hint { color: var(--ink-soft); }
+
+.verdict-card .ref, .read-only-notice code { color: var(--ink-faint); }
