@@ -51,13 +51,29 @@ export function registerChargeQueueRoutes(app: FastifyInstance): void {
     const merchant = await requireMerchant(request, reply);
     if (merchant === null) return reply;
     const limit = Math.min(500, Number(request.query.limit ?? 100) || 100);
-    const { rows } = await query<QueueRow>(QUEUE_SQL, [merchant, limit]);
+    const [{ rows }, integration] = await Promise.all([
+      query<QueueRow>(QUEUE_SQL, [merchant, limit]),
+      query<{ integration: string | null; at_risk: number }>(
+        `SELECT m.integration,
+                (SELECT count(*)::int FROM subscription s WHERE s.merchant_id = m.id) AS at_risk
+           FROM merchant m WHERE m.id = $1`,
+        [merchant],
+      ).then((r) => r.rows[0]),
+    ]);
+
+    const chargesItself = integration?.integration === 'recurring_tokens';
+
     return {
       queue: rows,
-      note:
-        'Razorpay exposes no API to charge an issued invoice. These are ranked for a human to ' +
-        'action from the Razorpay dashboard, highest expected value first. Domestic cards cannot ' +
-        'be charged manually by anyone and are listed last.',
+      integration: integration?.integration ?? null,
+      charges_itself: chargesItself,
+      note: chargesItself
+        ? 'Your account holds saved mandates, which Helm charges itself at the time it chose. ' +
+          'Nothing lands here for you to action by hand. This queue only fills for accounts on ' +
+          'Razorpay Subscriptions, where an invoice is issued and no API can charge it.'
+        : 'Razorpay exposes no API to charge an issued invoice. These are ranked for a human to ' +
+          'action from the Razorpay dashboard, highest expected value first. Domestic cards cannot ' +
+          'be charged manually by anyone and are listed last.',
     };
   });
 }

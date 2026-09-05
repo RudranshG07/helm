@@ -7,7 +7,9 @@ import { Announce, SkeletonTable } from './skeletons.tsx';
 import { bucketLabel, expiry, humanAction, humanMethod, ist, rupees, sinceNow } from './format.ts';
 
 export function ChargeQueue() {
-  const [data, setData] = useState<{ queue: QueueRow[]; note: string } | null>(null);
+  const [data, setData] = useState<
+    { queue: QueueRow[]; note: string; charges_itself: boolean } | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -17,7 +19,18 @@ export function ChargeQueue() {
   if (error) return <div className="state is-error"><strong>Could not load the queue</strong>{error}</div>;
   if (!data) return <Announce label="Loading"><SkeletonTable /></Announce>;
   if (data.queue.length === 0) {
-    return <div className="state"><strong>Nothing to charge</strong>No at-risk mandate has an outstanding invoice.</div>;
+    return (
+      <div className="state locked">
+        <strong>
+          {data.charges_itself ? 'Helm charges these itself' : 'Nothing waiting on a human'}
+        </strong>
+        <p>{data.note}</p>
+        <p className="hint">
+          An empty queue here is the good outcome. Work only appears when Razorpay issues an
+          invoice that no API can charge, and a person has to go and collect it.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -523,9 +536,17 @@ export function Outreach() {
   if (!data) return <Announce label="Loading"><SkeletonTable /></Announce>;
   if (data.outreach.length === 0) {
     return (
-      <div className="state">
+      <div className="state locked">
         <strong>Nobody has been contacted</strong>
-        Outreach happens when a mandate fails for a reason no retry can fix.
+        <p>
+          Helm only writes to a customer when no retry can succeed — a closed account, a revoked
+          mandate, a dead card. Every failure on your account so far is the kind a retry can fix,
+          so contacting anyone would be noise.
+        </p>
+        <p className="hint">
+          When it does send, every message is here with its language, what it said, and whether it
+          was opened, ignored or acted on.
+        </p>
       </div>
     );
   }
