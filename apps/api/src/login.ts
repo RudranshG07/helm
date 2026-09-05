@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { decryptSecret, deriveMasterKey, fingerprint, inspectKeyId } from '@mandate/core';
 import { query } from '@mandate/db';
-import { checkPassword, hashPassword, verifyPassword } from './auth.ts';
+import { checkPassword, hashPassword, normaliseEmail, verifyPassword } from './auth.ts';
 import { clearSessionCookie, requireMerchant, signIn } from './session.ts';
 
 const MAX_ATTEMPTS = 6;
@@ -63,10 +63,10 @@ async function byKey(keyId: string, keySecret: string): Promise<{ id: string; na
   return sameSecret(keySecret, stored) ? { id: row.id, name: row.name } : null;
 }
 
-async function byPassword(name: string, password: string): Promise<{ id: string; name: string } | null> {
+async function byEmail(email: string, password: string): Promise<{ id: string; name: string } | null> {
   const { rows } = await query<{ id: string; name: string; password_hash: string | null }>(
-    `SELECT id, name, password_hash FROM merchant WHERE lower(name) = lower($1)`,
-    [name],
+    `SELECT id, name, password_hash FROM merchant WHERE lower(email) = $1`,
+    [normaliseEmail(email)],
   );
   const row = rows[0];
   if (!row) return null;
@@ -75,26 +75,26 @@ async function byPassword(name: string, password: string): Promise<{ id: string;
 
 export function registerLoginRoutes(app: FastifyInstance): void {
   app.post<{
-    Body: { key_id?: string; key_secret?: string; name?: string; password?: string };
+    Body: { key_id?: string; key_secret?: string; email?: string; password?: string };
   }>('/api/auth/login', async (request, reply) => {
     const keyId = (request.body?.key_id ?? '').trim();
     const keySecret = (request.body?.key_secret ?? '').trim();
-    const name = (request.body?.name ?? '').trim();
+    const email = normaliseEmail(request.body?.email ?? '');
     const password = request.body?.password ?? '';
 
     const usingKeys = keyId.length > 0 || keySecret.length > 0;
-    const throttleKey = usingKeys ? keyId.toLowerCase() : name.toLowerCase();
+    const throttleKey = usingKeys ? keyId.toLowerCase() : email;
 
-    if (usingKeys ? keySecret.length === 0 || keyId.length === 0 : name.length === 0 || password.length === 0) {
+    if (usingKeys ? keySecret.length === 0 || keyId.length === 0 : email.length === 0 || password.length === 0) {
       return reply.code(400).send({
-        error: 'Sign in with your Razorpay key id and secret, or with the business name and password you set.',
+        error: 'Sign in with your email and password, or with your Razorpay key id and secret.',
       });
     }
     if (tooMany(throttleKey)) {
       return reply.code(429).send({ error: 'Too many attempts. Wait fifteen minutes and try again.' });
     }
 
-    const merchant = usingKeys ? await byKey(keyId, keySecret) : await byPassword(name, password);
+    const merchant = usingKeys ? await byKey(keyId, keySecret) : await byEmail(email, password);
 
     if (!merchant) {
       recordFailure(throttleKey);
@@ -124,11 +124,12 @@ export function registerLoginRoutes(app: FastifyInstance): void {
     const merchant = await requireMerchant(request, reply);
     if (merchant === null) return reply;
 
-    const { rows } = await query<{ id: string; name: string; has_keys: boolean }>(
-      `SELECT id, name, (rzp_key_id IS NOT NULL) AS has_keys FROM merchant WHERE id = $1`,
+    const { rows } = await query<{ id: string; name: string; email: string | null; has_keys: boolean }>(
+      `SELECT id, name, email, (rzp_key_id IS NOT NULL) AS has_keys
+         FROM merchant WHERE id = $1`,
       [merchant],
     );
-    return rows[0] ?? { id: merchant, name: merchant, has_keys: false };
+    return rows[0] ?? { id: merchant, name: merchant, email: null, has_keys: false };
   });
 
   app.post<{ Body: { password?: string } }>('/api/auth/password', async (request, reply) => {

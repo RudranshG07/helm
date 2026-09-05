@@ -322,10 +322,10 @@ function Loading() {
 }
 
 function SignInScreen({ onSignedIn }: { onSignedIn: () => void }) {
-  const [how, setHow] = useState<'keys' | 'password'>('keys');
+  const [byEmail, setByEmail] = useState(false);
   const [keyId, setKeyId] = useState('');
   const [keySecret, setKeySecret] = useState('');
-  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -335,9 +335,9 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => void }) {
     setBusy(true);
     setProblem(null);
     try {
-      await signIn(how === 'keys'
-        ? { key_id: keyId.trim(), key_secret: keySecret.trim() }
-        : { name: name.trim(), password });
+      await signIn(byEmail
+        ? { email: email.trim(), password }
+        : { key_id: keyId.trim(), key_secret: keySecret.trim() });
       onSignedIn();
     } catch (err) {
       setProblem((err as Error).message);
@@ -361,11 +361,25 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => void }) {
       <form className="onboard-form paper sign-in" onSubmit={(e) => void submit(e)}>
         <h1>Sign in</h1>
         <p className="field-note">
-          Your Razorpay keys are the credential. Whoever holds them controls the account, so
-          nothing else is needed and there is no extra password to lose.
+          {byEmail
+            ? 'For an account created by importing a file, which has no Razorpay keys.'
+            : 'Paste the same Razorpay keys you connected with. Nothing else, and no account name.'}
         </p>
 
-        {how === 'keys' ? (
+        {byEmail ? (
+          <>
+            <label htmlFor="email">Email</label>
+            <input
+              id="email" name="email" type="email" autoComplete="email" required
+              value={email} onChange={(e) => setEmail(e.target.value)}
+            />
+            <label htmlFor="pw">Password</label>
+            <input
+              id="pw" name="password" type="password" autoComplete="current-password" required
+              value={password} onChange={(e) => setPassword(e.target.value)}
+            />
+          </>
+        ) : (
           <>
             <label htmlFor="kid">Razorpay key ID</label>
             <input
@@ -373,26 +387,11 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => void }) {
               value={keyId} onChange={(e) => setKeyId(e.target.value)}
               placeholder="rzp_test_..."
             />
-
             <label htmlFor="ksec">Key secret</label>
             <input
               id="ksec" name="password" type="password" autoComplete="current-password" required
               value={keySecret} onChange={(e) => setKeySecret(e.target.value)}
               placeholder="••••••••••••"
-            />
-          </>
-        ) : (
-          <>
-            <label htmlFor="biz">Business name</label>
-            <input
-              id="biz" name="organization" autoComplete="organization" required
-              value={name} onChange={(e) => setName(e.target.value)}
-            />
-
-            <label htmlFor="pw">Password</label>
-            <input
-              id="pw" name="password" type="password" autoComplete="current-password" required
-              value={password} onChange={(e) => setPassword(e.target.value)}
             />
           </>
         )}
@@ -404,22 +403,11 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => void }) {
         </button>
 
         <p className="field-note">
-          {how === 'keys' ? (
-            <>
-              Imported a file instead of connecting keys?{' '}
-              <button type="button" className="link as-button" onClick={() => setHow('password')}>
-                Sign in with the password you set
-              </button>.
-            </>
-          ) : (
-            <>
-              Connected with Razorpay keys?{' '}
-              <button type="button" className="link as-button" onClick={() => setHow('keys')}>
-                Use those instead
-              </button>.
-            </>
-          )}
-          {' '}No account yet? <a className="link" href="/onboard">Connect your Razorpay account</a>.
+          Not connected yet? <a className="link" href="/onboard">Connect your Razorpay account</a>.
+          {' '}
+          <button type="button" className="link as-button" onClick={() => setByEmail(!byEmail)}>
+            {byEmail ? 'Use Razorpay keys instead' : 'Imported a file instead?'}
+          </button>
         </p>
       </form>
     </div>
@@ -433,16 +421,18 @@ export default function App() {
   const [mode, setMode] = useState<string | null>(null);
   const [control, setControl] = useState<Control | null>(null);
   const [business, setBusiness] = useState<string | null>(null);
+  const [connected, setConnected] = useState<boolean | null>(null);
   const { route, param } = useHashRoute();
 
   const load = useCallback(async () => {
     try {
-      const [overview, atRiskRes, declines, decisions, health, ctrl, mine] = await Promise.all([
+      const [overview, atRiskRes, declines, decisions, health, ctrl, me] = await Promise.all([
         api.overview(), api.atRisk(), api.declines(), api.decisions(), api.health(), api.control(),
-        api.merchants(),
+        api.me(),
       ]);
       setControl(ctrl);
-      setBusiness(mine.merchants[0]?.name ?? null);
+      setBusiness(me.name);
+      setConnected(me.has_keys);
       setData({
         overview,
         atRisk: atRiskRes.subscriptions,
@@ -472,6 +462,24 @@ export default function App() {
 
   if (signedIn === false) {
     return <SignInScreen onSignedIn={() => { setSignedIn(null); void load(); }} />;
+  }
+
+  if (connected === false) {
+    return (
+      <div className="shell">
+        <Masthead mode={mode} route="" killed={false} business={business} />
+        <div className="state locked">
+          <strong>One step left</strong>
+          <p>
+            Your account exists, but no Razorpay account is connected to it yet, so there is
+            nothing to watch. Connect read-only keys once and Helm reads your payment history.
+            You will never need to type them again.
+          </p>
+          <a className="cta" href="/onboard">Connect Razorpay</a>
+          <p className="hint">Test mode keys are fine. Nothing is charged until you turn it on.</p>
+        </div>
+      </div>
+    );
   }
 
   if (error) {

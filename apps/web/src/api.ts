@@ -183,6 +183,7 @@ export interface PublicTotals {
 export const api = {
   health: () => get<Health>('/health'),
   publicTotals: () => get<PublicTotals>('/api/public'),
+  me: () => get<{ id: string; name: string; email: string | null; has_keys: boolean }>('/api/auth/me'),
   merchants: () => get<{ merchants: Merchant[] }>('/api/merchants'),
   control: () => get<Control>('/api/control'),
   setKillSwitch: (engaged: boolean, token?: string, reason?: string) =>

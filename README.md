@@ -124,10 +124,10 @@ Reported here rather than left for a reviewer to find.
 - **The taxonomy is unverified.** Seven decline reasons are mapped; **zero** are confirmed by a retry outcome. A wrong bucket spends a real attempt on a mandate that cannot be saved.
 - **The timing model does not yet beat the base rate.** Every prediction is now stored as it was made and scored against the attempt it caused. Over 65 attempts it is calibrated in aggregate — it said 89.0%, 89.2% happened — but its skill is **-0.16**, so it is not yet telling a good slot from a bad one. None of those observations come from a real account.
 - **A single batch is not a stable estimate.** The treatment arm updates its model as it runs, so a poor start makes it pessimistic about the rest of the population. Measured across seven times of day on identical inputs, it spends 31–36 attempts in business hours and 1 at 05:30 IST.
-- **Sign-in has no second factor.** The Razorpay key id and secret are the credential, and the session is an httpOnly cookie scoped to that account. Anyone holding those keys already controls the Razorpay account, so this adds no new exposure — but it adds no second factor either.
+- **Sign-in has no second factor.** The Razorpay key id and secret are the credential, and the session is an httpOnly cookie scoped to that account. Whoever holds those keys already controls the Razorpay account, so this adds no exposure that did not exist — but it adds no second factor and no Google sign-in either.
 - **Onboarding asks for API keys.** Razorpay partner OAuth is the correct answer and needs approval we could not obtain. A CSV import path exists for merchants who will not hand over keys.
 
-The full catalogue — **276 scenarios, 269 handled, 6 detected, 1 unhandled** — is generated from the code at [`/docs`](https://helm-xuxb.onrender.com/docs), including the ones we still get wrong, in our own words.
+The full catalogue — **278 scenarios, 271 handled, 6 detected, 1 unhandled** — is generated from the code at [`/docs`](https://helm-xuxb.onrender.com/docs), including the ones we still get wrong, in our own words.
 
 ---
 
@@ -136,7 +136,7 @@ The full catalogue — **276 scenarios, 269 handled, 6 detected, 1 unhandled** �
 ```bash
 pnpm install
 pnpm dev          # database, migrations, web build, worker, api on :3000
-pnpm test         # 984 tests, against isolated databases
+pnpm test         # 986 tests, against isolated databases
 ```
 
 Deployed as a single service: the worker runs inside the web process, so it fits a free tier. Postgres is in Mumbai for data residency.
@@ -152,8 +152,8 @@ connect   /onboard     dash    /dashboard mandates  /authorize
 
 | | |
 |---|---|
-| Tests | 984 |
-| Adversarial scenarios | 276 — 269 handled, 6 detected, 1 unhandled |
+| Tests | 986 |
+| Adversarial scenarios | 278 — 271 handled, 6 detected, 1 unhandled |
 | Policy rules | 16 |
 | Migrations | 18 |
 | Source files | 125 |

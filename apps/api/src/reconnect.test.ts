@@ -20,13 +20,19 @@ afterAll(async () => { await reset(); await close(); });
 describe('connecting the same Razorpay account twice resumes it', () => {
   it('identifies a merchant by its account, not by the name someone typed', () => {
     const lookup = onboard.indexOf('WHERE key_fingerprint = $1');
-    const fallback = onboard.indexOf('existing[0]?.id ?? slug(name)');
+    const fallback = onboard.indexOf('owner ?? signedInAs ?? slug(name)');
     expect(lookup, 'no lookup by fingerprint').toBeGreaterThan(-1);
     expect(fallback, 'the name is still the only identity').toBeGreaterThan(lookup);
   });
 
   it('tells the caller it resumed rather than created', () => {
     expect(onboard).toMatch(/resumed/);
+  });
+
+  it('attaches the keys to the account already signed in', () => {
+    expect(onboard).toContain('resolveMerchant(request)');
+    expect(onboard, 'a connected account must not be stolen by another login')
+      .toMatch(/already connected to a different Helm account/);
   });
 
   it('finds an existing merchant by fingerprint', async () => {

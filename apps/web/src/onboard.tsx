@@ -83,6 +83,7 @@ export default function Onboard() {
   const [name, setName] = useState('');
   const [keyId, setKeyId] = useState('');
   const [keySecret, setKeySecret] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -112,7 +113,7 @@ export default function Onboard() {
             name, key_id: keyId, key_secret: keySecret,
           })
         : await send<{ merchant_id: string }>('/api/onboard/upload', {
-            name, csv: file?.text ?? '', password,
+            name, csv: file?.text ?? '', email, password,
           });
       setMerchantId(result.merchant_id);
     } catch (err) {
@@ -178,6 +179,7 @@ export default function Onboard() {
       <form className="onboard-form paper" onSubmit={(e) => void submit(e)}>
         <p className="field-note">
           Already connected? <a className="link" href="/dashboard">Sign in with your Razorpay keys</a>.
+          Connecting the same keys again always reopens the same account, whatever name you type.
         </p>
 
         <label htmlFor="biz">Business name</label>
@@ -243,6 +245,13 @@ export default function Onboard() {
 
         {method === 'upload' && (
           <>
+            <label htmlFor="email">Email to sign in with</label>
+            <input
+              id="email" name="email" type="email" autoComplete="email" required
+              value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@yourbusiness.in"
+            />
+
             <label htmlFor="pw">Password to get back in</label>
             <input
               id="pw" name="password" type="password" autoComplete="new-password" required

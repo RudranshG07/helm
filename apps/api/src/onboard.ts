@@ -1,5 +1,5 @@
-import { requireOwnMerchant, signIn } from './session.ts';
-import { checkPassword, hashPassword } from './auth.ts';
+import { requireOwnMerchant, resolveMerchant, signIn } from './session.ts';
+import { checkEmail, checkPassword, hashPassword, normaliseEmail } from './auth.ts';
 import { buildRecoveryReport } from '@mandate/worker/report/recovery';
 import type { FastifyInstance } from 'fastify';
 import {
@@ -76,11 +76,51 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
       if (!check.ok) return reply.code(400).send({ error: check.problem });
 
       const print = fingerprint(keyId);
+      const signedInAs = await resolveMerchant(request);
+
       const { rows: existing } = await query<{ id: string }>(
         `SELECT id FROM merchant WHERE key_fingerprint = $1`, [print],
       );
-      const resumed = existing.length > 0;
-      const id = existing[0]?.id ?? slug(name);
+      const owner = existing[0]?.id;
+
+      if (owner !== undefined && signedInAs !== null && owner !== signedInAs) {
+        const { rows: caller } = await query<{ has_keys: boolean }>(
+          `SELECT rzp_key_id IS NOT NULL AS has_keys FROM merchant WHERE id = $1`,
+          [signedInAs],
+        );
+        if (caller[0]?.has_keys) {
+          return reply.code(409).send({
+            error: 'That Razorpay account is already connected to a different Helm account.',
+          });
+        }
+
+        await withTransaction(async (client) => {
+          const { rows: claimant } = await client.query<{
+            email: string | null; password_hash: string | null; password_set_at: Date | null;
+          }>(
+            `SELECT email, password_hash, password_set_at FROM merchant WHERE id = $1`,
+            [signedInAs],
+          );
+          await client.query(
+            `DELETE FROM merchant WHERE id = $1 AND rzp_key_id IS NULL`, [signedInAs],
+          );
+          const c = claimant[0];
+          if (c?.email) {
+            await client.query(
+              `UPDATE merchant SET
+                 email = COALESCE(email, $2),
+                 password_hash = COALESCE(password_hash, $3),
+                 password_set_at = COALESCE(password_set_at, $4)
+               WHERE id = $1`,
+              [owner, c.email, c.password_hash, c.password_set_at],
+            );
+          }
+        });
+        app.log.info({ event: 'onboard.claimed', merchant_id: owner, from: signedInAs });
+      }
+
+      const resumed = owner !== undefined;
+      const id = owner ?? signedInAs ?? slug(name);
 
 
       await withTransaction(async (client) => {
@@ -90,7 +130,6 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
              integration, onboarding_state, connected_at, write_enabled
            ) VALUES ($1,$2,$3,$4,$5,$6,'recurring_tokens','backfilling',clock_timestamp(),FALSE)
            ON CONFLICT (id) DO UPDATE SET
-             name = EXCLUDED.name,
              rzp_key_id = EXCLUDED.rzp_key_id,
              rzp_key_secret_enc = EXCLUDED.rzp_key_secret_enc,
              key_fingerprint = EXCLUDED.key_fingerprint,
@@ -112,16 +151,19 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
     },
   );
 
-  app.post<{ Body: { name?: string; csv?: string; password?: string } }>(
+  app.post<{ Body: { name?: string; csv?: string; email?: string; password?: string } }>(
     '/api/onboard/upload',
     async (request, reply) => {
       const name = (request.body?.name ?? '').trim();
       const csv = request.body?.csv ?? '';
+      const email = normaliseEmail(request.body?.email ?? '');
       const password = request.body?.password ?? '';
 
       if (name.length === 0) return reply.code(400).send({ error: 'Give the business a name.' });
       if (csv.length === 0) return reply.code(400).send({ error: 'The file is empty.' });
 
+      const emailShape = checkEmail(email);
+      if (!emailShape.ok) return reply.code(400).send({ error: emailShape.problem });
       const passwordShape = checkPassword(password);
       if (!passwordShape.ok) return reply.code(400).send({ error: passwordShape.problem });
       if (csv.length > 12_000_000) {
@@ -147,12 +189,13 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
       await withTransaction(async (client) => {
         await client.query(
           `INSERT INTO merchant (id, name, mode, onboarding_state, connected_at, write_enabled,
-                                 password_hash, password_set_at)
-           VALUES ($1,$2,'test','backfilling',clock_timestamp(),FALSE,$3,now())
+                                 email, password_hash, password_set_at)
+           VALUES ($1,$2,'test','backfilling',clock_timestamp(),FALSE,$3,$4,now())
            ON CONFLICT (id) DO UPDATE SET
              name = EXCLUDED.name, onboarding_state = 'backfilling', onboarding_error = NULL,
-             password_hash = EXCLUDED.password_hash, password_set_at = now()`,
-          [id, name, passwordHash],
+             email = EXCLUDED.email, password_hash = EXCLUDED.password_hash,
+             password_set_at = now()`,
+          [id, name, email, passwordHash],
         );
         await client.query(
           `INSERT INTO onboarding_job (merchant_id, kind, progress)

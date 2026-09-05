@@ -34,8 +34,8 @@ beforeAll(async () => {
     [M, KEY_ID, encryptSecret(KEY_SECRET, key), fingerprint(KEY_ID)],
   );
   await query(
-    `INSERT INTO merchant (id, name, mode, password_hash, password_set_at)
-     VALUES ($1, 'Tiffin Imported', 'test', $2, now())`,
+    `INSERT INTO merchant (id, name, mode, email, password_hash, password_set_at)
+     VALUES ($1, 'Tiffin Imported', 'test', 'owner@tiffin.test', $2, now())`,
     [IMPORTED, await hashPassword(PASSWORD)],
   );
 
@@ -100,31 +100,45 @@ describe('a merchant signs in with the credential they already hold', () => {
   });
 });
 
-describe('a merchant who uploaded a file signs in with the password they set', () => {
-  it('accepts the business name and password', async () => {
-    const res = await login({ name: 'Tiffin Imported', password: PASSWORD });
+describe('a merchant signs in with their email once the account exists', () => {
+  it('accepts the email and password', async () => {
+    const res = await login({ email: 'owner@tiffin.test', password: PASSWORD });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ merchant_id: IMPORTED });
   });
 
-  it('does not care about the case of the business name', async () => {
-    const res = await login({ name: 'tiffin imported', password: PASSWORD });
+  it('does not care about the case of the email', async () => {
+    const res = await login({ email: 'OWNER@TIFFIN.TEST', password: PASSWORD });
     expect(res.statusCode).toBe(200);
   });
 
   it('refuses the wrong password', async () => {
-    const res = await login({ name: 'Tiffin Imported', password: 'nope' });
+    const res = await login({ email: 'owner@tiffin.test', password: 'nope' });
     expect(res.statusCode).toBe(401);
   });
 
-  it('refuses a merchant that has no password set', async () => {
-    const res = await login({ name: 'Iron Works', password: PASSWORD });
+  it('refuses an account that has no password set', async () => {
+    const res = await login({ email: 'nobody@nowhere.test', password: PASSWORD });
     expect(res.statusCode).toBe(401);
   });
 
   it('asks for something rather than signing in an empty form', async () => {
     const res = await login({});
     expect(res.statusCode).toBe(400);
+  });
+
+  it('signs in with email after the keys were only ever typed once', async () => {
+    const byKeys = await login({ key_id: KEY_ID, key_secret: KEY_SECRET });
+    expect(byKeys.statusCode).toBe(200);
+
+    await query(
+      `UPDATE merchant SET email = $2, password_hash = $3, password_set_at = now() WHERE id = $1`,
+      [M, 'owner@ironworks.test', await hashPassword(PASSWORD)],
+    );
+
+    const byEmail = await login({ email: 'owner@ironworks.test', password: PASSWORD });
+    expect(byEmail.statusCode).toBe(200);
+    expect(byEmail.json()).toMatchObject({ merchant_id: M });
   });
 });
 
