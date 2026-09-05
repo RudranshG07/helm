@@ -1683,3 +1683,5 @@ tr.is-ours td { background: rgba(47, 125, 91, 0.09); }
 
 .my-recovery { margin-bottom: 26px; }
 .section-head.spaced { margin-top: 26px; }
+
+.row-action { min-height: 32px; padding: 0 14px; font-size: 12px; white-space: nowrap; }

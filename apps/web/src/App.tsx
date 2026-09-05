@@ -199,6 +199,7 @@ function AtRisk({ rows }: { rows: AtRiskRow[] }) {
             <th scope="col">Attempts left</th>
             <th scope="col">Mandate</th>
             <th scope="col">Last decline</th>
+            <th scope="col"><span className="visually-hidden">Actions</span></th>
           </tr>
         </thead>
         <tbody>
@@ -229,6 +230,14 @@ function AtRisk({ rows }: { rows: AtRiskRow[] }) {
                     ? <span className={`badge ${r.last_bucket}`}>{bucketLabel(r.last_bucket)}</span>
                     : '—'}
                   {r.last_error_reason && <> <span className="ref">{r.last_error_reason}</span></>}
+                </td>
+                <td>
+                  <a
+                    className="cta ghost row-action"
+                    href={`#/mandate/${encodeURIComponent(r.subscription_id)}`}
+                  >
+                    Decide
+                  </a>
                 </td>
               </tr>
             );
