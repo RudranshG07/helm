@@ -72,3 +72,16 @@ describe('a merchant with nothing failing can still decide', () => {
     expect(ui).toContain('nothing to');
   });
 });
+
+describe('signing in never asks for a name', () => {
+  const onboardSrc = onboard;
+
+  it('does not require a business name to connect', () => {
+    expect(onboardSrc).not.toContain("error: 'Give the business a name.' });\n\n      const shape");
+    expect(onboardSrc).toContain('typedName.length > 0 ? typedName');
+  });
+
+  it('derives a name from the key when none is given', () => {
+    expect(onboardSrc).toMatch(/Account \$\{keyId\.slice\(-6\)\}/);
+  });
+});

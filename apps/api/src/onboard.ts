@@ -47,11 +47,9 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
   app.post<{ Body: { name?: string; key_id?: string; key_secret?: string } }>(
     '/api/onboard/connect',
     async (request, reply) => {
-      const name = (request.body?.name ?? '').trim();
+      const typedName = (request.body?.name ?? '').trim();
       const keyId = (request.body?.key_id ?? '').trim();
       const keySecret = (request.body?.key_secret ?? '').trim();
-
-      if (name.length === 0) return reply.code(400).send({ error: 'Give the business a name.' });
 
       const shape = inspectKeyId(keyId);
       if (!shape.valid) return reply.code(400).send({ error: shape.problem });
@@ -120,6 +118,7 @@ export function registerOnboardRoutes(app: FastifyInstance): void {
       }
 
       const resumed = owner !== undefined;
+      const name = typedName.length > 0 ? typedName : `Account ${keyId.slice(-6)}`;
       const id = owner ?? signedInAs ?? slug(name);
 
 

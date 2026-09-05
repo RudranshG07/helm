@@ -178,16 +178,20 @@ export default function Onboard() {
 
       <form className="onboard-form paper" onSubmit={(e) => void submit(e)}>
         <p className="field-note">
-          Already connected? <a className="link" href="/dashboard">Sign in with your Razorpay keys</a>.
-          Connecting the same keys again always reopens the same account, whatever name you type.
+          Already connected? <a className="link" href="/dashboard">Sign in with the same keys</a>.
+          The keys are the only thing that identifies you, so there is nothing else to remember.
         </p>
 
-        <label htmlFor="biz">Business name</label>
-        <input
-          id="biz" name="organization" autoComplete="organization" required
-          value={name} onChange={(e) => setName(e.target.value)}
-          placeholder="Iron Works Gym"
-        />
+        {method === 'upload' && (
+          <>
+            <label htmlFor="biz">Business name</label>
+            <input
+              id="biz" name="organization" autoComplete="organization" required
+              value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="Iron Works Gym"
+            />
+          </>
+        )}
 
         {method === 'connect' ? (
           <>
