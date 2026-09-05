@@ -127,7 +127,7 @@ Reported here rather than left for a reviewer to find.
 - **Sign-in has no second factor.** The Razorpay key id and secret are the credential, and the session is an httpOnly cookie scoped to that account. Whoever holds those keys already controls the Razorpay account, so this adds no exposure that did not exist — but it adds no second factor and no Google sign-in either.
 - **Onboarding asks for API keys.** Razorpay partner OAuth is the correct answer and needs approval we could not obtain. A CSV import path exists for merchants who will not hand over keys.
 
-The full catalogue — **278 scenarios, 271 handled, 6 detected, 1 unhandled** — is generated from the code at [`/docs`](https://helm-xuxb.onrender.com/docs), including the ones we still get wrong, in our own words.
+The full catalogue — **279 scenarios, 272 handled, 6 detected, 1 unhandled** — is generated from the code at [`/docs`](https://helm-xuxb.onrender.com/docs), including the ones we still get wrong, in our own words.
 
 ---
 
@@ -136,7 +136,7 @@ The full catalogue — **278 scenarios, 271 handled, 6 detected, 1 unhandled** �
 ```bash
 pnpm install
 pnpm dev          # database, migrations, web build, worker, api on :3000
-pnpm test         # 988 tests, against isolated databases
+pnpm test         # 996 tests, against isolated databases
 ```
 
 Deployed as a single service: the worker runs inside the web process, so it fits a free tier. Postgres is in Mumbai for data residency.
@@ -152,10 +152,10 @@ connect   /onboard     dash    /dashboard mandates  /authorize
 
 | | |
 |---|---|
-| Tests | 988 |
-| Adversarial scenarios | 278 — 271 handled, 6 detected, 1 unhandled |
+| Tests | 996 |
+| Adversarial scenarios | 279 — 272 handled, 6 detected, 1 unhandled |
 | Policy rules | 16 |
-| Migrations | 18 |
+| Migrations | 19 |
 | Source files | 125 |
 
 Every figure on this page is measured or generated. Nothing is estimated.

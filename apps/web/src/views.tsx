@@ -455,11 +455,11 @@ export function KillSwitch({ control, onChange }: { control: Control; onChange: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function engage() {
+  async function set(engaged: boolean) {
     setBusy(true);
     setError(null);
     try {
-      await api.setKillSwitch(true, undefined, 'engaged from dashboard');
+      await api.setKillSwitch(engaged, engaged ? 'halted from the dashboard' : undefined);
       onChange();
     } catch (e) {
       setError((e as Error).message);
@@ -468,36 +468,33 @@ export function KillSwitch({ control, onChange }: { control: Control; onChange: 
     }
   }
 
-  async function release() {
-    const token = window.prompt('Release token');
-    if (token === null) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api.setKillSwitch(false, token);
-      onChange();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const stopped = control.halted || control.kill_switch;
 
   return (
-    <div className={`killswitch${control.kill_switch ? ' is-engaged' : ''}`}>
+    <div className={`killswitch${stopped ? ' is-engaged' : ''}`}>
       <div>
-        <div className="label">Kill switch</div>
-        <div className="value">{control.kill_switch ? 'ENGAGED' : 'clear'}</div>
+        <div className="label">Charging</div>
+        <div className="value">{stopped ? 'HALTED' : 'running'}</div>
         <div className="note">
           {control.kill_switch
-            ? (control.kill_switch_reason ?? 'all execution halted')
+            ? (control.kill_switch_reason ?? 'stopped for every account by an operator')
+            : control.halted
+            ? (control.halt_reason ?? 'you stopped charging for this account')
             : `dry run ${control.dry_run ? 'on' : 'OFF'} · ${control.mode} mode`}
         </div>
         {error && <div className="note err">{error}</div>}
       </div>
-      {control.kill_switch
-        ? <button type="button" className="retry" onClick={() => void release()} disabled={busy}>Release</button>
-        : <button type="button" className="danger" onClick={() => void engage()} disabled={busy}>Halt everything</button>}
+      {control.kill_switch ? (
+        <span className="ref">operator only</span>
+      ) : control.halted ? (
+        <button type="button" className="retry" onClick={() => void set(false)} disabled={busy}>
+          Resume charging
+        </button>
+      ) : (
+        <button type="button" className="danger" onClick={() => void set(true)} disabled={busy}>
+          Halt my account
+        </button>
+      )}
     </div>
   );
 }

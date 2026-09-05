@@ -28,7 +28,8 @@ const CONTEXT_SQL = `
 SELECT
   s.status, s.method, s.amount_paise, s.mandate_expiry_at,
   m.write_enabled, m.integration,
-  (SELECT kill_switch FROM control_flags WHERE id = 1) AS kill_switch,
+  ((SELECT kill_switch FROM control_flags WHERE id = 1)
+     OR m.halted_at IS NOT NULL) AS kill_switch,
   (SELECT count(*)::int FROM payment_attempt
     WHERE subscription_id = s.id AND cycle = $2 AND counts_against_budget) AS attempts_used,
   EXISTS (SELECT 1 FROM payment_attempt

@@ -93,10 +93,11 @@ export interface Merchant {
 export interface Control {
   kill_switch: boolean;
   kill_switch_reason: string | null;
+  halted: boolean;
+  halt_reason: string | null;
   updated_at: string;
   dry_run: boolean;
   mode: string;
-  release_requires_token: boolean;
 }
 
 export interface QueueRow {
@@ -186,8 +187,9 @@ export const api = {
   me: () => get<{ id: string; name: string; email: string | null; has_keys: boolean }>('/api/auth/me'),
   merchants: () => get<{ merchants: Merchant[] }>('/api/merchants'),
   control: () => get<Control>('/api/control'),
-  setKillSwitch: (engaged: boolean, token?: string, reason?: string) =>
-    post<{ kill_switch: boolean }>('/api/control/kill-switch', { engaged, token, reason }),
+  setKillSwitch: (engaged: boolean, reason?: string) =>
+    post<{ halted: boolean; halt_reason: string | null }>(
+      '/api/control/kill-switch', { engaged, reason }),
   trace: (id: string) => get<DecisionTrace>(`/api/decisions/${encodeURIComponent(id)}/trace`),
   outreach: () => get<{ outreach: OutreachRow[]; funnel: Record<string, number> }>('/api/outreach?limit=200'),
   chargeQueue: () => get<{ queue: QueueRow[]; note: string }>('/api/charge-queue'),

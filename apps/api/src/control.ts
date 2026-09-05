@@ -1,4 +1,4 @@
-import { requireMerchant } from './session.ts';
+import { requireMerchant, resolveMerchant } from './session.ts';
 import { buildReport, reportIndex } from '@mandate/worker/reports/live';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
@@ -20,48 +20,57 @@ export function registerControlRoutes(app: FastifyInstance): void {
     return { merchants: rows };
   });
 
-  app.get('/api/control', async () => {
+  app.get('/api/control', async (request) => {
     const { rows } = await query<{
       kill_switch: boolean; kill_switch_reason: string | null; updated_at: Date;
     }>(`SELECT kill_switch, kill_switch_reason, updated_at FROM control_flags WHERE id = 1`);
+
+    const merchant = await resolveMerchant(request);
+    let halted = false;
+    let halt_reason: string | null = null;
+
+    if (merchant !== null) {
+      const { rows: mine } = await query<{ halted_at: Date | null; halt_reason: string | null }>(
+        `SELECT halted_at, halt_reason FROM merchant WHERE id = $1`,
+        [merchant],
+      );
+      halted = mine[0]?.halted_at != null;
+      halt_reason = mine[0]?.halt_reason ?? null;
+    }
+
     return {
       ...rows[0],
+      halted,
+      halt_reason,
       dry_run: process.env['DRY_RUN'] !== 'false',
       mode: process.env['RAZORPAY_MODE'] ?? 'test',
-      release_requires_token: Boolean(process.env['KILL_SWITCH_RELEASE_TOKEN']),
     };
   });
 
-  app.post<{ Body: { engaged?: boolean; reason?: string; token?: string } }>(
+  app.post<{ Body: { engaged?: boolean; reason?: string } }>(
     '/api/control/kill-switch',
     async (request, reply) => {
-      if ((await requireMerchant(request, reply)) === null) return reply;
-      const engaged = request.body?.engaged !== false;
+      const merchant = await requireMerchant(request, reply);
+      if (merchant === null) return reply;
 
-      if (!engaged) {
-        const required = process.env['KILL_SWITCH_RELEASE_TOKEN'];
-        if (!required) {
-          return reply.code(403).send({
-            error: 'Releasing the kill switch requires KILL_SWITCH_RELEASE_TOKEN to be configured.',
-          });
-        }
-        if (request.body?.token !== required) {
-          app.log.warn({ event: 'killswitch.release_denied' });
-          return reply.code(403).send({ error: 'Invalid release token.' });
-        }
-      }
+      const engaged = request.body?.engaged !== false;
+      const reason = engaged
+        ? (request.body?.reason?.trim() || 'halted from the dashboard')
+        : null;
 
       await query(
-        `UPDATE control_flags
-            SET kill_switch = $1,
-                kill_switch_reason = $2,
-                updated_at = clock_timestamp()
-          WHERE id = 1`,
-        [engaged, engaged ? (request.body?.reason ?? 'engaged from dashboard') : null],
+        `UPDATE merchant
+            SET halted_at = CASE WHEN $2 THEN clock_timestamp() ELSE NULL END,
+                halt_reason = $3
+          WHERE id = $1`,
+        [merchant, engaged, reason],
       );
 
-      app.log.warn({ event: engaged ? 'killswitch.engaged' : 'killswitch.released' });
-      return { kill_switch: engaged };
+      app.log.warn({
+        event: engaged ? 'merchant.halted' : 'merchant.resumed',
+        merchant_id: merchant,
+      });
+      return { halted: engaged, halt_reason: reason };
     },
   );
 

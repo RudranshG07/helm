@@ -28,8 +28,6 @@ services:
         sync: false
       - key: SECRET_MASTER_KEY
         sync: false
-      - key: KILL_SWITCH_RELEASE_TOKEN
-        sync: false
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
