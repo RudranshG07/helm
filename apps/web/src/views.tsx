@@ -96,6 +96,13 @@ function MandateActions({ id, onDone }: { id: string; onDone: () => void }) {
   const [result, setResult] = useState<ActionResult | null>(null);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [writeEnabled, setWriteEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    api.merchants()
+      .then((r) => setWriteEnabled(r.merchants[0]?.write_enabled ?? false))
+      .catch(() => setWriteEnabled(null));
+  }, []);
 
   async function run(action: string) {
     setBusy(action);
@@ -119,6 +126,18 @@ function MandateActions({ id, onDone }: { id: string; onDone: () => void }) {
         Your request goes through the same sixteen rules the agent does. If a rule refuses it, the
         refusal is recorded against your name rather than quietly dropped.
       </p>
+
+      {writeEnabled === false && (
+        <div className="read-only-notice" role="note">
+          <strong>Every action below will be refused right now</strong>
+          <p>
+            You have not granted write access, so rule <code>R-CONSENT</code> denies anything that
+            would touch a customer. That is the system working, not a fault — but it does mean this
+            page can only watch until you turn it on.
+          </p>
+          <a className="cta" href="/onboard">Grant write access</a>
+        </div>
+      )}
 
       <label htmlFor="note">Why (optional)</label>
       <input

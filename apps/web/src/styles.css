@@ -1685,3 +1685,12 @@ tr.is-ours td { background: rgba(47, 125, 91, 0.09); }
 .section-head.spaced { margin-top: 26px; }
 
 .row-action { min-height: 32px; padding: 0 14px; font-size: 12px; white-space: nowrap; }
+
+.read-only-notice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  margin: 12px 0; padding: 16px 18px;
+  background: var(--paper); border-left: 4px solid var(--warn);
+  border-radius: var(--radius-sm);
+}
+.read-only-notice strong { font-size: 15px; }
+.read-only-notice p { margin: 0; max-width: 62ch; font-size: 14px; line-height: 1.5; }
