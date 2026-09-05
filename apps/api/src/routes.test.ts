@@ -5,6 +5,7 @@ import { registerAuthorizeRoutes } from './authorize.ts';
 import { registerChargeQueueRoutes } from './charge-queue.ts';
 import { registerControlRoutes } from './control.ts';
 import { registerDashboardRoutes } from './dashboard.ts';
+import { registerActionRoutes } from './actions.ts';
 import { registerLoginRoutes } from './login.ts';
 import { registerOnboardRoutes } from './onboard.ts';
 import { registerReauthRoutes } from './reauth.ts';
@@ -42,6 +43,7 @@ beforeAll(async () => {
   app.get('/health', async () => ({ ok: true }));
   registerDashboardRoutes(app);
   registerControlRoutes(app);
+  registerActionRoutes(app);
   registerLoginRoutes(app);
   registerOnboardRoutes(app);
   registerChargeQueueRoutes(app);

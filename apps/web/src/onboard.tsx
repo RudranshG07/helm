@@ -83,7 +83,6 @@ export default function Onboard() {
   const [name, setName] = useState('');
   const [keyId, setKeyId] = useState('');
   const [keySecret, setKeySecret] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -110,10 +109,10 @@ export default function Onboard() {
     try {
       const result = method === 'connect'
         ? await send<{ merchant_id: string }>('/api/onboard/connect', {
-            name, key_id: keyId, key_secret: keySecret, email, password,
+            name, key_id: keyId, key_secret: keySecret,
           })
         : await send<{ merchant_id: string }>('/api/onboard/upload', {
-            name, csv: file?.text ?? '', email, password,
+            name, csv: file?.text ?? '', password,
           });
       setMerchantId(result.merchant_id);
     } catch (err) {
@@ -178,7 +177,7 @@ export default function Onboard() {
 
       <form className="onboard-form paper" onSubmit={(e) => void submit(e)}>
         <p className="field-note">
-          Already have an account? <a className="link" href="/dashboard">Sign in</a>.
+          Already connected? <a className="link" href="/dashboard">Sign in with your Razorpay keys</a>.
         </p>
 
         <label htmlFor="biz">Business name</label>
@@ -242,23 +241,20 @@ export default function Onboard() {
           </>
         )}
 
-        <label htmlFor="email">Email to sign in with</label>
-        <input
-          id="email" name="email" type="email" autoComplete="email" required
-          value={email} onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@yourbusiness.in"
-        />
-
-        <label htmlFor="pw">Password</label>
-        <input
-          id="pw" name="password" type="password" autoComplete="new-password" required
-          minLength={10} value={password} onChange={(e) => setPassword(e.target.value)}
-          placeholder="At least 10 characters"
-        />
-        <p className="field-note">
-          This is how you get back in. Forgotten it? Connect the same Razorpay key again and it
-          sets a new one.
-        </p>
+        {method === 'upload' && (
+          <>
+            <label htmlFor="pw">Password to get back in</label>
+            <input
+              id="pw" name="password" type="password" autoComplete="new-password" required
+              minLength={10} value={password} onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 10 characters"
+            />
+            <p className="field-note">
+              A file upload leaves us nothing to recognise you by, so pick a password. Connecting
+              Razorpay keys instead needs no password: the keys are the credential.
+            </p>
+          </>
+        )}
 
         {error && <p className="form-error" role="alert">{error}</p>}
 

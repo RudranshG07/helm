@@ -1,13 +1,15 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { deriveMasterKey, encryptSecret, fingerprint } from '@mandate/core';
 import { close, query } from '@mandate/db';
 import { hashPassword, verifyPassword } from './auth.ts';
 import { registerDashboardRoutes } from './dashboard.ts';
 import { registerLoginRoutes } from './login.ts';
 
 const M = 'merchant_auth_test';
-const OTHER = 'merchant_auth_other';
-const EMAIL = 'owner@ironworks.test';
+const IMPORTED = 'merchant_auth_imported';
+const KEY_ID = 'rzp_test_AUTHTESTKEY1';
+const KEY_SECRET = 'the-real-key-secret';
 const PASSWORD = 'a-long-enough-password';
 
 let app: FastifyInstance;
@@ -15,23 +17,26 @@ let app: FastifyInstance;
 function cookieFrom(headers: Record<string, unknown>): string | null {
   const raw = headers['set-cookie'];
   const value = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof value !== 'string') return null;
-  return value.split(';')[0] ?? null;
+  return typeof value === 'string' ? (value.split(';')[0] ?? null) : null;
 }
 
 beforeAll(async () => {
-  for (const id of [M, OTHER]) {
+  process.env['SECRET_MASTER_KEY'] ??= 'a-test-master-key-long-enough-for-the-suite';
+  const key = deriveMasterKey(process.env['SECRET_MASTER_KEY']!);
+
+  for (const id of [M, IMPORTED]) {
     await query(`DELETE FROM subscription WHERE merchant_id = $1`, [id]);
     await query(`DELETE FROM merchant WHERE id = $1`, [id]);
   }
   await query(
-    `INSERT INTO merchant (id, name, mode, email, password_hash, password_set_at)
-     VALUES ($1, 'Iron Works', 'test', $2, $3, now())`,
-    [M, EMAIL, await hashPassword(PASSWORD)],
+    `INSERT INTO merchant (id, name, mode, rzp_key_id, rzp_key_secret_enc, key_fingerprint)
+     VALUES ($1, 'Iron Works', 'test', $2, $3, $4)`,
+    [M, KEY_ID, encryptSecret(KEY_SECRET, key), fingerprint(KEY_ID)],
   );
   await query(
-    `INSERT INTO merchant (id, name, mode) VALUES ($1, 'Other', 'test')`,
-    [OTHER],
+    `INSERT INTO merchant (id, name, mode, password_hash, password_set_at)
+     VALUES ($1, 'Tiffin Imported', 'test', $2, now())`,
+    [IMPORTED, await hashPassword(PASSWORD)],
   );
 
   app = Fastify();
@@ -45,24 +50,91 @@ afterAll(async () => {
   await close();
 });
 
-describe('a password is stored so a database leak does not reveal it', () => {
+const login = (payload: Record<string, string>) =>
+  app.inject({ method: 'POST', url: '/api/auth/login', payload });
+
+describe('a merchant signs in with the credential they already hold', () => {
+  it('opens the dashboard with the Razorpay key and secret', async () => {
+    const res = await login({ key_id: KEY_ID, key_secret: KEY_SECRET });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ merchant_id: M, name: 'Iron Works' });
+  });
+
+  it('refuses the right key with the wrong secret', async () => {
+    const res = await login({ key_id: KEY_ID, key_secret: `${KEY_SECRET}x` });
+    expect(res.statusCode).toBe(401);
+    expect(cookieFrom(res.headers)).toBeNull();
+  });
+
+  it('refuses a key that belongs to nobody, with the same words', async () => {
+    const unknown = await login({ key_id: 'rzp_test_NOSUCHKEY99', key_secret: KEY_SECRET });
+    const wrong = await login({ key_id: KEY_ID, key_secret: 'wrong' });
+    expect(unknown.statusCode).toBe(401);
+    expect(unknown.json().error).toBe(wrong.json().error);
+  });
+
+  it('refuses something that is not a Razorpay key at all', async () => {
+    const res = await login({ key_id: 'sk_live_stripe', key_secret: KEY_SECRET });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('sets a cookie the page scripts cannot read', async () => {
+    const res = await login({ key_id: KEY_ID, key_secret: KEY_SECRET });
+    const header = res.headers['set-cookie'];
+    const cookie = Array.isArray(header) ? header[0]! : (header as string);
+    expect(cookie).toContain('helm_session=');
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('SameSite=Lax');
+  });
+
+  it('opens the dashboard with nothing but that cookie', async () => {
+    const cookie = cookieFrom((await login({ key_id: KEY_ID, key_secret: KEY_SECRET })).headers)!;
+    expect((await app.inject({ method: 'GET', url: '/api/overview' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/api/overview', headers: { cookie } })).statusCode).toBe(200);
+  });
+
+  it('stops working the moment you sign out', async () => {
+    const cookie = cookieFrom((await login({ key_id: KEY_ID, key_secret: KEY_SECRET })).headers)!;
+    expect((await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/api/overview', headers: { cookie } })).statusCode).toBe(401);
+  });
+});
+
+describe('a merchant who uploaded a file signs in with the password they set', () => {
+  it('accepts the business name and password', async () => {
+    const res = await login({ name: 'Tiffin Imported', password: PASSWORD });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ merchant_id: IMPORTED });
+  });
+
+  it('does not care about the case of the business name', async () => {
+    const res = await login({ name: 'tiffin imported', password: PASSWORD });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('refuses the wrong password', async () => {
+    const res = await login({ name: 'Tiffin Imported', password: 'nope' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('refuses a merchant that has no password set', async () => {
+    const res = await login({ name: 'Iron Works', password: PASSWORD });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('asks for something rather than signing in an empty form', async () => {
+    const res = await login({});
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('a password, where one exists, is stored so a leak does not reveal it', () => {
   it('never keeps the password itself', async () => {
     const { rows } = await query<{ password_hash: string }>(
-      `SELECT password_hash FROM merchant WHERE id = $1`, [M],
+      `SELECT password_hash FROM merchant WHERE id = $1`, [IMPORTED],
     );
     expect(rows[0]!.password_hash).not.toContain(PASSWORD);
     expect(rows[0]!.password_hash.startsWith('scrypt$')).toBe(true);
-  });
-
-  it('accepts the right password and refuses a near miss', async () => {
-    const stored = (await query<{ password_hash: string }>(
-      `SELECT password_hash FROM merchant WHERE id = $1`, [M],
-    )).rows[0]!.password_hash;
-
-    expect(await verifyPassword(PASSWORD, stored)).toBe(true);
-    expect(await verifyPassword(`${PASSWORD}x`, stored)).toBe(false);
-    expect(await verifyPassword(PASSWORD.slice(0, -1), stored)).toBe(false);
-    expect(await verifyPassword(PASSWORD, null)).toBe(false);
   });
 
   it('gives two merchants different hashes for the same password', async () => {
@@ -71,84 +143,5 @@ describe('a password is stored so a database leak does not reveal it', () => {
     expect(a).not.toBe(b);
     expect(await verifyPassword(PASSWORD, a)).toBe(true);
     expect(await verifyPassword(PASSWORD, b)).toBe(true);
-  });
-});
-
-describe('signing in', () => {
-  it('refuses a wrong password without saying whether the email exists', async () => {
-    const wrongPassword = await app.inject({
-      method: 'POST', url: '/api/auth/login',
-      payload: { email: EMAIL, password: 'not-the-password' },
-    });
-    const noSuchEmail = await app.inject({
-      method: 'POST', url: '/api/auth/login',
-      payload: { email: 'nobody@nowhere.test', password: 'not-the-password' },
-    });
-
-    expect(wrongPassword.statusCode).toBe(401);
-    expect(noSuchEmail.statusCode).toBe(401);
-    expect(wrongPassword.json().error).toBe(noSuchEmail.json().error);
-    expect(cookieFrom(wrongPassword.headers)).toBeNull();
-  });
-
-  it('sets a cookie the browser will not hand to scripts', async () => {
-    const res = await app.inject({
-      method: 'POST', url: '/api/auth/login', payload: { email: EMAIL, password: PASSWORD },
-    });
-    expect(res.statusCode).toBe(200);
-
-    const header = res.headers['set-cookie'];
-    const cookie = Array.isArray(header) ? header[0]! : (header as string);
-    expect(cookie).toContain('helm_session=');
-    expect(cookie).toContain('HttpOnly');
-    expect(cookie).toContain('SameSite=Lax');
-  });
-
-  it('is case insensitive about the email', async () => {
-    const res = await app.inject({
-      method: 'POST', url: '/api/auth/login',
-      payload: { email: EMAIL.toUpperCase(), password: PASSWORD },
-    });
-    expect(res.statusCode).toBe(200);
-  });
-
-  it('opens the dashboard with nothing but that cookie', async () => {
-    const login = await app.inject({
-      method: 'POST', url: '/api/auth/login', payload: { email: EMAIL, password: PASSWORD },
-    });
-    const cookie = cookieFrom(login.headers)!;
-
-    const before = await app.inject({ method: 'GET', url: '/api/overview' });
-    const after = await app.inject({
-      method: 'GET', url: '/api/overview', headers: { cookie },
-    });
-
-    expect(before.statusCode).toBe(401);
-    expect(after.statusCode).toBe(200);
-  });
-
-  it('says who is signed in', async () => {
-    const login = await app.inject({
-      method: 'POST', url: '/api/auth/login', payload: { email: EMAIL, password: PASSWORD },
-    });
-    const me = await app.inject({
-      method: 'GET', url: '/api/auth/me', headers: { cookie: cookieFrom(login.headers)! },
-    });
-    expect(me.json()).toMatchObject({ id: M, name: 'Iron Works', email: EMAIL });
-  });
-
-  it('stops working the moment you sign out', async () => {
-    const login = await app.inject({
-      method: 'POST', url: '/api/auth/login', payload: { email: EMAIL, password: PASSWORD },
-    });
-    const cookie = cookieFrom(login.headers)!;
-
-    expect((await app.inject({ method: 'GET', url: '/api/overview', headers: { cookie } })).statusCode).toBe(200);
-
-    const out = await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } });
-    expect(out.statusCode).toBe(200);
-
-    const after = await app.inject({ method: 'GET', url: '/api/overview', headers: { cookie } });
-    expect(after.statusCode, 'the old cookie must be dead, not merely cleared in the browser').toBe(401);
   });
 });

@@ -1661,3 +1661,22 @@ tr.is-ours td { background: rgba(47, 125, 91, 0.09); }
   font-family: var(--display); font-weight: var(--display-weight);
   font-size: var(--step-md); line-height: var(--display-leading);
 }
+
+.link.as-button {
+  padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; text-decoration: underline; cursor: pointer;
+}
+
+.mandate-actions { margin: 18px 0; }
+.mandate-actions input { max-width: 52ch; }
+.action-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+
+.verdict-card {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin-top: 14px; padding: 14px 16px;
+  background: var(--paper); border-radius: var(--radius-sm);
+  border-left: 4px solid var(--line-strong);
+}
+.verdict-card.is-allow { border-left-color: var(--good); }
+.verdict-card.is-deny { border-left-color: var(--critical); }
+.verdict-card p { flex-basis: 100%; margin: 0; }

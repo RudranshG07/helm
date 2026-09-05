@@ -5,11 +5,15 @@ export class NotConnected extends Error {
   }
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
+export type Credentials =
+  | { key_id: string; key_secret: string }
+  | { name: string; password: string };
+
+export async function signIn(credentials: Credentials): Promise<void> {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(credentials),
   });
   const body = (await res.json()) as { error?: string };
   if (!res.ok) throw new Error(body.error ?? 'That did not work.');

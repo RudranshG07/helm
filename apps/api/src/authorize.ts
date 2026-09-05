@@ -50,13 +50,23 @@ async function rzp<T>(path: string, init: RequestInit = {}): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-export const MANDATE_SET = [
-  { label: 'Gym membership', amount_paise: 149900 },
-  { label: 'Tiffin service', amount_paise: 49900 },
-  { label: 'Coaching fees', amount_paise: 499900 },
-  { label: 'Streaming', amount_paise: 19900 },
-  { label: 'Society maintenance', amount_paise: 249900 },
-  { label: 'Insurance premium', amount_paise: 89900 },
+export const RECURRING_METHODS = ['upi_autopay', 'card', 'nach', 'emandate'] as const;
+export type RecurringMethod = (typeof RECURRING_METHODS)[number];
+
+export const MANDATE_SET: {
+  label: string;
+  amount_paise: number;
+  method: RecurringMethod;
+  frequency: 'monthly' | 'weekly' | 'yearly';
+}[] = [
+  { label: 'Gym membership', amount_paise: 149900, method: 'upi_autopay', frequency: 'monthly' },
+  { label: 'Tiffin service', amount_paise: 49900, method: 'upi_autopay', frequency: 'weekly' },
+  { label: 'Streaming', amount_paise: 19900, method: 'upi_autopay', frequency: 'monthly' },
+  { label: 'Coaching fees', amount_paise: 499900, method: 'card', frequency: 'monthly' },
+  { label: 'Insurance premium', amount_paise: 89900, method: 'card', frequency: 'yearly' },
+  { label: 'Society maintenance', amount_paise: 249900, method: 'nach', frequency: 'monthly' },
+  { label: 'Newspaper delivery', amount_paise: 4900, method: 'upi_autopay', frequency: 'monthly' },
+  { label: 'Broadband', amount_paise: 119900, method: 'emandate', frequency: 'monthly' },
 ];
 
 const MERCHANT_ID = 'helm_test_account';
@@ -97,14 +107,23 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
   });
 
   app.post<{
-    Body: { label?: string; amount_paise?: number; method?: string; contact?: string; email?: string };
+    Body: {
+      label?: string; amount_paise?: number; method?: string; frequency?: string;
+      contact?: string; email?: string;
+    };
   }>(
     '/api/authorize/prepare',
     async (request, reply) => {
       if ((await requireMerchant(request, reply)) === null) return reply;
       const label = (request.body?.label ?? '').trim() || 'Mandate';
       const amount = Number(request.body?.amount_paise ?? 0);
-      const method = request.body?.method === 'card' ? 'card' : 'emandate';
+      const requested = request.body?.method ?? '';
+      const method: RecurringMethod = (RECURRING_METHODS as readonly string[]).includes(requested)
+        ? (requested as RecurringMethod)
+        : 'upi_autopay';
+      const frequency = request.body?.frequency === 'weekly' || request.body?.frequency === 'yearly'
+        ? request.body.frequency
+        : 'monthly';
 
       if (!Number.isInteger(amount) || amount < 100) {
         return reply.code(400).send({ error: 'Amount must be a whole number of paise, at least 100.' });
@@ -124,37 +143,45 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
         const maxAmount = Math.min(MAX_AMOUNT_PAISE, Math.max(amount * 2, 100000));
         const expireAt = Math.floor(Date.now() / 1000) + 365 * 86400;
 
-        const body = method === 'card'
-          ? {
-              amount: 100,
-              currency: 'INR',
-              method: 'card',
-              customer_id: customer.id,
-              receipt: `helm_auth_${Date.now()}`,
-              payment_capture: true,
-              token: { max_amount: maxAmount, expire_at: expireAt, frequency: 'monthly' },
-              notes: { helm_label: label, helm_amount: String(amount) },
-            }
-          : {
-              amount: 0,
-              currency: 'INR',
-              method: 'emandate',
-              customer_id: customer.id,
-              receipt: `helm_auth_${Date.now()}`,
-              payment_capture: true,
-              token: {
-                auth_type: 'netbanking',
-                max_amount: maxAmount,
-                expire_at: expireAt,
-                bank_account: {
-                  beneficiary_name: label,
-                  account_number: '1121431121541121',
-                  account_type: 'savings',
-                  ifsc_code: 'HDFC0000053',
-                },
-              },
-              notes: { helm_label: label, helm_amount: String(amount) },
-            };
+        const receipt = `helm_auth_${Date.now()}`;
+        const notes = { helm_label: label, helm_amount: String(amount) };
+        const bankAccount = {
+          beneficiary_name: label,
+          account_number: '11214311570503',
+          account_type: 'savings',
+          ifsc_code: 'HDFC0000053',
+        };
+
+        const bodies: Record<RecurringMethod, Record<string, unknown>> = {
+          upi_autopay: {
+            amount: 100, currency: 'INR', method: 'upi', customer_id: customer.id,
+            receipt, payment_capture: true, notes,
+            token: { max_amount: maxAmount, expire_at: expireAt, frequency },
+          },
+          card: {
+            amount: 100, currency: 'INR', method: 'card', customer_id: customer.id,
+            receipt, payment_capture: true, notes,
+            token: { max_amount: maxAmount, expire_at: expireAt, frequency },
+          },
+          nach: {
+            amount: 0, currency: 'INR', method: 'nach', customer_id: customer.id,
+            receipt, payment_capture: true, notes,
+            token: {
+              auth_type: 'physical', max_amount: maxAmount, expire_at: expireAt,
+              bank_account: bankAccount,
+              nach: { description: label.slice(0, 30) },
+            },
+          },
+          emandate: {
+            amount: 0, currency: 'INR', method: 'emandate', customer_id: customer.id,
+            receipt, payment_capture: true, notes,
+            token: {
+              auth_type: 'netbanking', max_amount: maxAmount, expire_at: expireAt,
+              bank_account: bankAccount,
+            },
+          },
+        };
+        const body = bodies[method];
 
         const order = await rzp<RzpOrder>('/orders', {
           method: 'POST',
@@ -168,7 +195,8 @@ export function registerAuthorizeRoutes(app: FastifyInstance): void {
           label,
           amount_paise: amount,
           method,
-          bank: method === 'emandate' ? 'HDFC' : null,
+          frequency,
+          bank: method === 'emandate' || method === 'nach' ? 'HDFC' : null,
         };
       } catch (err) {
         app.log.error({ event: 'authorize.prepare_failed', message: (err as Error).message });

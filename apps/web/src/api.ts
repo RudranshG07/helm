@@ -193,6 +193,10 @@ export const api = {
   reports: () => get<{ reports: { slug: string; title: string; description: string }[] }>('/api/reports'),
   report: (slug: string) => get<{ slug: string; markdown: string }>(`/api/reports/${slug}`),
   detail: (id: string) => get<Detail>(`/api/subscriptions/${encodeURIComponent(id)}`),
+  act: (id: string, action: string, note?: string) =>
+    post<{ decision_id: string | null; action: string; verdict: string; rule_id: string;
+           explanation: string | null; scheduled_for: string | null }>(
+      `/api/mandates/${encodeURIComponent(id)}/action`, { action, note }),
   overview: () => get<Overview>('/api/overview'),
   atRisk: () => get<{ subscriptions: AtRiskRow[] }>('/api/at-risk'),
   declines: () => get<{ distribution: DeclineRow[]; unmapped: UnmappedRow[] }>('/api/declines'),

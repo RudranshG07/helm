@@ -25,7 +25,7 @@ interface Config {
   ready: boolean;
   problem: string | null;
   key_id: string | null;
-  mandates: { label: string; amount_paise: number }[];
+  mandates: { label: string; amount_paise: number; method: string; frequency: string }[];
   authorized: number;
   account: Account;
 }
@@ -40,7 +40,6 @@ interface Mandate {
 
 
 type State = 'idle' | 'preparing' | 'open' | 'saving' | 'done' | 'error';
-type PayMethod = 'emandate' | 'card';
 
 const STATUS_BADGE: Record<RailStatus, string> = {
   usable: 'healthy',
@@ -74,13 +73,19 @@ function useCheckoutScript(): boolean {
   return loaded;
 }
 
+const RAIL_LABEL: Record<string, string> = {
+  upi_autopay: 'UPI Autopay',
+  card: 'recurring card',
+  nach: 'NACH',
+  emandate: 'e-mandate',
+};
+
 export default function Authorize() {
   const [config, setConfig] = useState<Config | null>(null);
   const [mandates, setMandates] = useState<Mandate[]>([]);
   const [state, setState] = useState<State>('idle');
   const [message, setMessage] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
-  const [payMethod, setPayMethod] = useState<PayMethod>('emandate');
   const [locked, setLocked] = useState(false);
   const checkoutReady = useCheckoutScript();
 
@@ -99,7 +104,7 @@ export default function Authorize() {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  async function authorize(label: string, amountPaise: number) {
+  async function authorize(label: string, amountPaise: number, method: string, frequency: string) {
     if (!window.Razorpay) { setMessage('Checkout has not loaded yet.'); setState('error'); return; }
     setActive(label);
     setState('preparing');
@@ -109,7 +114,7 @@ export default function Authorize() {
       const prep = await fetch('/api/authorize/prepare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, amount_paise: amountPaise, method: payMethod }),
+        body: JSON.stringify({ label, amount_paise: amountPaise, method, frequency }),
       }).then(async (r) => {
         const b = await r.json();
         if (!r.ok) throw new Error(b.error ?? 'Could not prepare the mandate.');
@@ -272,39 +277,25 @@ export default function Authorize() {
         <section>
           <div className="section-head"><h2>Authorise a live mandate</h2></div>
 
-          <div className="switch" role="tablist" aria-label="Authorisation method">
-            {(['emandate', 'card'] as PayMethod[]).map((m) => (
-              <button
-                key={m} type="button" role="tab" aria-selected={payMethod === m}
-                className={`switch-opt${payMethod === m ? ' is-on' : ''}`}
-                onClick={() => setPayMethod(m)}
-              >
-                {m === 'emandate' ? 'e-mandate' : 'Card'}
-              </button>
-            ))}
-          </div>
-
           <p className="onboard-lede pull-up-more">
-            {payMethod === 'card'
-              ? 'Use the recurring-eligible test card below. A generic test card is refused as not eligible.'
-              : 'Pick any bank, then choose Success on the simulated bank page.'}
+            Each mandate below uses the rail a real business of that kind would use. UPI Autopay
+            opens a collect request, NACH and e-mandate ask for a bank, and the card ones need the
+            recurring-eligible test card. Choose Success on whichever screen appears.
           </p>
 
-          {payMethod === 'card' && (
-            <div className="testcard paper">
-              <div className="testcard-label">Recurring-eligible test card</div>
-              <div className="testcard-grid">
-                <div><span>Number</span><code>4718 6091 0820 4366</code></div>
-                <div><span>Expiry</span><code>12 / 30</code></div>
-                <div><span>CVV</span><code>123</code></div>
-                <div><span>Name</span><code>Test User</code></div>
-              </div>
-              <p className="testcard-note">
-                Domestic Visa credit, the card Razorpay documents for subscriptions and tokenisation.
-                On the OTP screen choose Success.
-              </p>
+          <div className="testcard paper">
+            <div className="testcard-label">Recurring-eligible test card</div>
+            <div className="testcard-grid">
+              <div><span>Number</span><code>4718 6091 0820 4366</code></div>
+              <div><span>Expiry</span><code>12 / 30</code></div>
+              <div><span>CVV</span><code>123</code></div>
+              <div><span>Name</span><code>Test User</code></div>
             </div>
-          )}
+            <p className="testcard-note">
+              Domestic Visa credit, the card Razorpay documents for subscriptions and tokenisation.
+              A generic test card is refused as not eligible. On the OTP screen choose Success.
+            </p>
+          </div>
 
           <div className="mandate-grid">
             {config.mandates.map((m) => {
@@ -313,11 +304,11 @@ export default function Authorize() {
                 <div className="mandate-card paper" key={m.label}>
                   <div className="mandate-label">{m.label}</div>
                   <div className="mandate-amount">{rupees(m.amount_paise)}</div>
-                  <div className="mandate-note">monthly · {payMethod === 'card' ? 'recurring card' : 'e-mandate'}</div>
+                  <div className="mandate-note">{m.frequency} · {RAIL_LABEL[m.method] ?? m.method}</div>
                   <button
                     type="button" className="cta"
                     disabled={!config.ready || !checkoutReady || busy}
-                    onClick={() => void authorize(m.label, m.amount_paise)}
+                    onClick={() => void authorize(m.label, m.amount_paise, m.method, m.frequency)}
                   >
                     {busy ? 'Opening…' : 'Authorise'}
                   </button>

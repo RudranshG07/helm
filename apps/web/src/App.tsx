@@ -322,7 +322,10 @@ function Loading() {
 }
 
 function SignInScreen({ onSignedIn }: { onSignedIn: () => void }) {
-  const [email, setEmail] = useState('');
+  const [how, setHow] = useState<'keys' | 'password'>('keys');
+  const [keyId, setKeyId] = useState('');
+  const [keySecret, setKeySecret] = useState('');
+  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -332,7 +335,9 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => void }) {
     setBusy(true);
     setProblem(null);
     try {
-      await signIn(email, password);
+      await signIn(how === 'keys'
+        ? { key_id: keyId.trim(), key_secret: keySecret.trim() }
+        : { name: name.trim(), password });
       onSignedIn();
     } catch (err) {
       setProblem((err as Error).message);
@@ -356,21 +361,41 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => void }) {
       <form className="onboard-form paper sign-in" onSubmit={(e) => void submit(e)}>
         <h1>Sign in</h1>
         <p className="field-note">
-          Your dashboard shows your mandates and your customers, and nobody else can open it.
+          Your Razorpay keys are the credential. Whoever holds them controls the account, so
+          nothing else is needed and there is no extra password to lose.
         </p>
 
-        <label htmlFor="email">Email</label>
-        <input
-          id="email" name="email" type="email" autoComplete="email" required
-          value={email} onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@yourbusiness.in"
-        />
+        {how === 'keys' ? (
+          <>
+            <label htmlFor="kid">Razorpay key ID</label>
+            <input
+              id="kid" name="username" autoComplete="username" required
+              value={keyId} onChange={(e) => setKeyId(e.target.value)}
+              placeholder="rzp_test_..."
+            />
 
-        <label htmlFor="pw">Password</label>
-        <input
-          id="pw" name="password" type="password" autoComplete="current-password" required
-          value={password} onChange={(e) => setPassword(e.target.value)}
-        />
+            <label htmlFor="ksec">Key secret</label>
+            <input
+              id="ksec" name="password" type="password" autoComplete="current-password" required
+              value={keySecret} onChange={(e) => setKeySecret(e.target.value)}
+              placeholder="••••••••••••"
+            />
+          </>
+        ) : (
+          <>
+            <label htmlFor="biz">Business name</label>
+            <input
+              id="biz" name="organization" autoComplete="organization" required
+              value={name} onChange={(e) => setName(e.target.value)}
+            />
+
+            <label htmlFor="pw">Password</label>
+            <input
+              id="pw" name="password" type="password" autoComplete="current-password" required
+              value={password} onChange={(e) => setPassword(e.target.value)}
+            />
+          </>
+        )}
 
         {problem && <p className="form-error" role="alert">{problem}</p>}
 
@@ -379,8 +404,22 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => void }) {
         </button>
 
         <p className="field-note">
-          No account yet? <a className="link" href="/onboard">Connect your Razorpay account</a>.
-          Forgotten your password? Connecting the same key again sets a new one.
+          {how === 'keys' ? (
+            <>
+              Imported a file instead of connecting keys?{' '}
+              <button type="button" className="link as-button" onClick={() => setHow('password')}>
+                Sign in with the password you set
+              </button>.
+            </>
+          ) : (
+            <>
+              Connected with Razorpay keys?{' '}
+              <button type="button" className="link as-button" onClick={() => setHow('keys')}>
+                Use those instead
+              </button>.
+            </>
+          )}
+          {' '}No account yet? <a className="link" href="/onboard">Connect your Razorpay account</a>.
         </p>
       </form>
     </div>

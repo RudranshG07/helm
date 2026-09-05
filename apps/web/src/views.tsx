@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
 import type { Control, Detail, DecisionTrace, Merchant, OutreachRow, QueueRow } from './api.ts';
 import { signOut } from './session.ts';
@@ -62,14 +62,97 @@ export function ChargeQueue() {
   );
 }
 
+interface ActionResult {
+  action: string;
+  verdict: string;
+  rule_id: string;
+  explanation: string | null;
+  scheduled_for: string | null;
+}
+
+const ACTIONS: { action: string; label: string; hint: string }[] = [
+  { action: 'RETRY_SCHEDULED', label: 'Charge this now', hint: 'Ask for an attempt against the remaining budget.' },
+  { action: 'REAUTH_OUTREACH', label: 'Ask for a new mandate', hint: 'Send the customer a re-authorisation link.' },
+  { action: 'STOP', label: 'Leave this alone', hint: 'Stop working this mandate for the rest of the cycle.' },
+];
+
+function MandateActions({ id, onDone }: { id: string; onDone: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const [note, setNote] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(action: string) {
+    setBusy(action);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await api.act(id, action, note.trim() || undefined));
+      setNote('');
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="mandate-actions">
+      <h3 className="sub">What you can do</h3>
+      <p className="hint">
+        Your request goes through the same sixteen rules the agent does. If a rule refuses it, the
+        refusal is recorded against your name rather than quietly dropped.
+      </p>
+
+      <label htmlFor="note">Why (optional)</label>
+      <input
+        id="note" value={note} onChange={(e) => setNote(e.target.value)}
+        placeholder="Customer rang and said their salary lands Friday"
+      />
+
+      <div className="action-row">
+        {ACTIONS.map((a) => (
+          <button
+            key={a.action} type="button" className="cta ghost"
+            title={a.hint} disabled={busy !== null}
+            onClick={() => void run(a.action)}
+          >
+            {busy === a.action ? 'Asking…' : a.label}
+          </button>
+        ))}
+      </div>
+
+      {error && <p className="form-error" role="alert">{error}</p>}
+
+      {result && (
+        <div className={`verdict-card ${result.verdict === 'ALLOW' ? 'is-allow' : 'is-deny'}`} role="status">
+          <span className={`badge ${result.verdict === 'ALLOW' ? 'healthy' : 'critical'}`}>
+            {result.verdict}
+          </span>
+          <span className="ref">{result.rule_id}</span>
+          <p>{result.explanation ?? (result.verdict === 'ALLOW' ? 'Queued.' : 'Refused.')}</p>
+          {result.scheduled_for && (
+            <p className="hint">Scheduled for {ist(result.scheduled_for)}.</p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function MandateDetail({ id }: { id: string }) {
   const [data, setData] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setData(null);
+  const reload = useCallback(() => {
     api.detail(id).then(setData).catch((e: Error) => setError(e.message));
   }, [id]);
+
+  useEffect(() => {
+    setData(null);
+    reload();
+  }, [id, reload]);
 
   if (error) return <div className="state is-error"><strong>Could not load this mandate</strong>{error}</div>;
   if (!data) return <Announce label="Loading"><SkeletonTable /></Announce>;
@@ -98,6 +181,8 @@ export function MandateDetail({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      <MandateActions id={id} onDone={reload} />
 
       {latest && Object.keys(latest.contributions).length > 0 && (
         <section>
