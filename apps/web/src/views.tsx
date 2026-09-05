@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
-import type { Control, Detail, DecisionTrace, Merchant, OutreachRow, QueueRow } from './api.ts';
+import type {
+  Control, Detail, DecisionTrace, Merchant, OutreachRow, QueueRow, RecoveryReport,
+} from './api.ts';
 import { signOut } from './session.ts';
 import { Markdown } from './markdown.tsx';
 import { Announce, SkeletonTable } from './skeletons.tsx';
@@ -325,6 +327,83 @@ export function MandateDetail({ id }: { id: string }) {
   );
 }
 
+function MyRecovery() {
+  const [report, setReport] = useState<RecoveryReport | null>(null);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    api.me()
+      .then((me) => api.recovery(me.id))
+      .then(setReport)
+      .catch(() => setMissing(true));
+  }, []);
+
+  if (missing) return null;
+  if (!report) return <Announce label="Building your recovery report"><SkeletonTable /></Announce>;
+
+  const { money, attempts } = report;
+
+  return (
+    <section className="my-recovery">
+      <div className="section-head">
+        <h2>Your money, last {report.window_days} days</h2>
+      </div>
+
+      {!report.has_history ? (
+        <div className="state locked">
+          <strong>Nothing has failed yet</strong>
+          <p>
+            No failed mandate in this window, so there is nothing to recover. Helm keeps watching
+            and this fills the moment one slips.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="tiles">
+            <div className="tile paper">
+              <span className="eyebrow">Failed</span>
+              <strong className="num">{rupees(money.at_risk_paise)}</strong>
+              <span className="hint">{(money.recovery_rate * 100).toFixed(0)}% of it came back on its own</span>
+            </div>
+            <div className="tile paper">
+              <span className="eyebrow">Never recovered</span>
+              <strong className="num">{rupees(money.lost_paise)}</strong>
+              <span className="hint">gone, unless the mandate is saved</span>
+            </div>
+            <div className="tile paper">
+              <span className="eyebrow">Helm can work on</span>
+              <strong className="num">{rupees(money.addressable_paise)}</strong>
+              <span className="hint">
+                {rupees(money.hard_paise)} needs a new mandate, {rupees(money.unclassified_paise)} is unclassified
+              </span>
+            </div>
+          </div>
+
+          <div className="paper table-wrap spaced">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Where your attempts went</th>
+                  <th scope="col" className="num">Attempts</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Spent by the default schedule</td><td className="num">{attempts.spent_by_default}</td></tr>
+                <tr><td>Wasted on declines no retry can fix</td><td className="num">{attempts.wasted_on_hard_declines}</td></tr>
+                <tr><td>Made inside a congested NPCI window</td><td className="num">{attempts.in_peak_windows}</td></tr>
+                <tr><td>Helm would move to a better time</td><td className="num">{attempts.we_would_reschedule}</td></tr>
+                <tr><td>Helm would not spend at all</td><td className="num">{attempts.we_would_not_spend}</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          {report.caveat && <p className="report-caveat spaced-sm" role="note">{report.caveat}</p>}
+        </>
+      )}
+    </section>
+  );
+}
+
 export function Reports({ slug }: { slug: string | null }) {
   const [list, setList] = useState<{ slug: string; title: string; description: string }[] | null>(null);
   const [markdown, setMarkdown] = useState<string | null>(null);
@@ -350,6 +429,16 @@ export function Reports({ slug }: { slug: string | null }) {
 
   return (
     <>
+      <MyRecovery />
+
+      <div className="section-head spaced">
+        <h2>How the engine was tested</h2>
+      </div>
+      <p className="hint">
+        These are about Helm itself rather than your account: what it was measured on, and where
+        it still gets things wrong.
+      </p>
+
       <nav className="report-tabs" aria-label="Reports">
         {list.map((r) => (
           <a

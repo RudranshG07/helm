@@ -90,6 +90,29 @@ export interface Merchant {
   subscriptions: number;
 }
 
+export interface RecoveryReport {
+  merchant_id: string;
+  window_days: number;
+  has_history: boolean;
+  money: {
+    at_risk_paise: number;
+    recovered_paise: number;
+    lost_paise: number;
+    addressable_paise: number;
+    unclassified_paise: number;
+    hard_paise: number;
+    recovery_rate: number;
+  };
+  attempts: {
+    spent_by_default: number;
+    wasted_on_hard_declines: number;
+    in_peak_windows: number;
+    we_would_reschedule: number;
+    we_would_not_spend: number;
+  };
+  caveat?: string;
+}
+
 export interface Control {
   kill_switch: boolean;
   kill_switch_reason: string | null;
@@ -195,6 +218,8 @@ export const api = {
   chargeQueue: () => get<{ queue: QueueRow[]; note: string; charges_itself: boolean }>(
     '/api/charge-queue'),
   reports: () => get<{ reports: { slug: string; title: string; description: string }[] }>('/api/reports'),
+  recovery: (merchantId: string) =>
+    get<RecoveryReport>(`/api/onboard/${encodeURIComponent(merchantId)}/report`),
   report: (slug: string) => get<{ slug: string; markdown: string }>(`/api/reports/${slug}`),
   detail: (id: string) => get<Detail>(`/api/subscriptions/${encodeURIComponent(id)}`),
   act: (id: string, action: string, note?: string) =>

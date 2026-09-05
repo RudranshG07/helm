@@ -1680,3 +1680,6 @@ tr.is-ours td { background: rgba(47, 125, 91, 0.09); }
 .verdict-card.is-allow { border-left-color: var(--good); }
 .verdict-card.is-deny { border-left-color: var(--critical); }
 .verdict-card p { flex-basis: 100%; margin: 0; }
+
+.my-recovery { margin-bottom: 26px; }
+.section-head.spaced { margin-top: 26px; }
